@@ -2239,11 +2239,47 @@ body {
 }
 
 /* ─── AI LINKS STYLES ─── */
+.ai-links-section {
+    margin-bottom: 16px;
+}
+
+.ai-links-section h4 {
+    color: var(--text-dim);
+    font-size: 10px;
+    font-family: var(--font-ui);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
 .ai-links-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin: 20px 0;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.ai-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: var(--text);
+    transition: all 0.2s;
+}
+
+.ai-link:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    transform: translateX(4px);
 }
 
 .ai-link {
