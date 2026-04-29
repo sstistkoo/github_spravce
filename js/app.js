@@ -44,6 +44,28 @@ function toggleTheme() {
   applyTheme(saved);
 })();
 
+// AI Links Modal
+const aiToggleBtn = document.getElementById('aiToggleBtn');
+const aiLinksModal = document.getElementById('aiLinksModal');
+const closeAiLinksModalBtn = document.getElementById('closeAiLinksModal');
+
+if (aiToggleBtn && aiLinksModal && closeAiLinksModalBtn) {
+  aiToggleBtn.addEventListener('click', () => {
+    aiLinksModal.style.display = 'flex';
+  });
+
+  closeAiLinksModalBtn.addEventListener('click', () => {
+    aiLinksModal.style.display = 'none';
+  });
+
+  // Close modal when clicking on overlay
+  aiLinksModal.addEventListener('click', (e) => {
+    if (e.target === aiLinksModal) {
+      aiLinksModal.style.display = 'none';
+    }
+  });
+}
+
 function saveToken(token) {
   localStorage.setItem(STORAGE_KEY, btoa(token));
 }
