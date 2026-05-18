@@ -2084,13 +2084,28 @@ function openFileUploadDialog(repo, path, mode = "files") {
 
     // Normalizuj relativní cestu
     const normalize = (f) => {
-      const rel = f.webkitRelativePath || f.name;
+      const rel = f.webkitRelativePath;
+      if (!rel) {
+        // webkitRelativePath je prázdný — browser nepodporuje nebo soubor bez složky
+        return f.name;
+      }
       if (mode === "contents" || mode === "smartsync") {
-        // Odřízni první segment (název vybrané složky)
-        return rel.indexOf("/") !== -1 ? rel.slice(rel.indexOf("/") + 1) : rel;
+        // Odřízni první segment (= název vybrané složky)
+        // "nazev-slozky/podsložka/soubor.txt" → "podsložka/soubor.txt"
+        // "nazev-slozky/soubor.txt" → "soubor.txt"
+        const slash = rel.indexOf("/");
+        return slash !== -1 ? rel.slice(slash + 1) : rel;
       }
       return rel;
     };
+
+    // Debug: zobraz prvních 5 cest v konzoli
+    const sample = rawFiles.slice(0, 5).map(f => ({
+      name: f.name,
+      webkitRelativePath: f.webkitRelativePath,
+      normalized: normalize(f),
+    }));
+    console.log(`[Upload mode="${mode}"] ukázka cest:`, sample);
 
     let files = rawFiles.map(f => ({ file: f, path: normalize(f) }));
 
@@ -2225,7 +2240,6 @@ async function collectDroppedFiles(dataTransfer) {
     if (entry) {
       await processDropEntry(entry, "", fileList);
     } else {
-      // fallback pro browsery bez webkitGetAsEntry
       const file = item.getAsFile();
       if (file) fileList.push({ file, path: file.name });
     }
@@ -2233,8 +2247,73 @@ async function collectDroppedFiles(dataTransfer) {
   return fileList;
 }
 
+// Vrátí true pokud všechny soubory sdílí stejný kořenový prefix (= přetáhnuta jedna složka)
+function getSingleDroppedFolderName(files) {
+  if (!files.length) return null;
+  const roots = new Set(files.map(f => f.path.split("/")[0]));
+  // Jedna společná kořenová složka A alespoň jeden soubor je v podsložce
+  if (roots.size === 1 && files.some(f => f.path.includes("/"))) {
+    return [...roots][0];
+  }
+  return null;
+}
+
 async function uploadDroppedFiles(files, repo, currentPath) {
   await runUpload(repo, currentPath, files);
+}
+
+// Zobrazí rychlý výběr jak nahrát přetaženou složku
+function showDropFolderChoice(folderName, files, repo, currentPath) {
+  // Odstraň starý dialog pokud existuje
+  const old = document.getElementById("dropChoiceDialog");
+  if (old) old.remove();
+
+  const dialog = document.createElement("div");
+  dialog.id = "dropChoiceDialog";
+  dialog.style.cssText = `
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 16px 20px; min-width: 340px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5); z-index: 9999;
+    font-family: var(--font-mono); font-size: 12px;
+  `;
+  dialog.innerHTML = `
+    <div style="margin-bottom:12px; color:var(--text);">
+      📁 Přetažena složka <strong style="color:var(--accent);">${folderName}</strong>
+      <span style="color:var(--text-dim);"> (${files.length} souborů)</span>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button id="dropChoiceFolder" style="flex:1; padding:8px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); cursor:pointer; font-size:11px; font-family:var(--font-mono);">
+        📁 Se složkou<br><span style="color:var(--text-dim); font-size:10px;">${currentPath ? currentPath + "/" : ""}${folderName}/soubor.txt</span>
+      </button>
+      <button id="dropChoiceContents" style="flex:1; padding:8px; background:var(--surface2); border:1px solid var(--accent); border-radius:6px; color:var(--accent); cursor:pointer; font-size:11px; font-family:var(--font-mono);">
+        📂 Jen obsah<br><span style="color:var(--text-dim); font-size:10px;">${currentPath ? currentPath + "/" : ""}soubor.txt</span>
+      </button>
+      <button id="dropChoiceCancel" style="padding:8px 12px; background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--text-dim); cursor:pointer; font-size:11px;">✕</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+
+  // Se složkou — nahraje jak je (folderName/soubor.txt)
+  document.getElementById("dropChoiceFolder").onclick = async () => {
+    dialog.remove();
+    await uploadDroppedFiles(files, repo, currentPath);
+  };
+
+  // Jen obsah — odřízni první segment (folderName/)
+  document.getElementById("dropChoiceContents").onclick = async () => {
+    dialog.remove();
+    const stripped = files.map(f => ({
+      file: f.file,
+      path: f.path.indexOf("/") !== -1 ? f.path.slice(f.path.indexOf("/") + 1) : f.path,
+    }));
+    await uploadDroppedFiles(stripped, repo, currentPath);
+  };
+
+  document.getElementById("dropChoiceCancel").onclick = () => dialog.remove();
+
+  // Auto-zavři po 30s
+  setTimeout(() => { if (dialog.parentNode) dialog.remove(); }, 30000);
 }
 
 function setupDragAndDrop() {
@@ -2288,7 +2367,14 @@ function setupDragAndDrop() {
       return;
     }
 
-    await uploadDroppedFiles(files, CURRENT_REPO, CURRENT_PATH);
+    // Detekuj jestli byla přetažena právě jedna složka
+    const folderName = getSingleDroppedFolderName(files);
+    if (folderName) {
+      // Zeptej se uživatele co chce
+      showDropFolderChoice(folderName, files, CURRENT_REPO, CURRENT_PATH);
+    } else {
+      await uploadDroppedFiles(files, CURRENT_REPO, CURRENT_PATH);
+    }
   });
 }
 
