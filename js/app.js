@@ -1285,6 +1285,9 @@ async function openFileViewer(name, path, repo) {
     VIEWER_ORIGINAL_CONTENT = content;
     VIEWER_FILE_SHA = fileData.sha;
     document.getElementById("saveFileBtn").style.display = "none";
+    document.getElementById("fileDiffBtn").style.display = "inline-flex";
+    document.getElementById("commitHistoryPanel").style.display = "none";
+    document.getElementById("diffPanel").style.display = "none";
     document.getElementById("fileViewerContent").textContent = content;
     document.getElementById("viewerFileMeta").textContent =
       formatBytes(content.length) +
@@ -1295,6 +1298,280 @@ async function openFileViewer(name, path, repo) {
       "Chyba při načítání: " + e.message;
   }
 }
+
+// ═══════════════════════════════════════
+//  COMMIT HISTORIE SOUBORU
+// ═══════════════════════════════════════
+document.getElementById("fileHistoryBtn").addEventListener("click", async () => {
+  const panel = document.getElementById("commitHistoryPanel");
+  const diffPanel = document.getElementById("diffPanel");
+  diffPanel.style.display = "none";
+
+  if (panel.style.display !== "none") {
+    panel.style.display = "none";
+    return;
+  }
+
+  panel.style.display = "block";
+  document.getElementById("commitHistoryList").innerHTML =
+    `<div style="padding:12px 14px; color:var(--text-dim); font-size:11px; font-family:var(--font-mono);">Načítám historii...</div>`;
+
+  try {
+    const commits = await ghFetch(
+      `/repos/${USERNAME}/${VIEWER_FILE.repo}/commits?path=${encodeURIComponent(VIEWER_FILE.path)}&per_page=20`
+    );
+
+    if (!commits.length) {
+      document.getElementById("commitHistoryList").innerHTML =
+        `<div style="padding:12px 14px; color:var(--text-dim); font-size:11px;">Žádné commity nenalezeny.</div>`;
+      return;
+    }
+
+    document.getElementById("commitHistoryList").innerHTML = commits.map((c, i) => {
+      const date = new Date(c.commit.author.date);
+      const dateStr = date.toLocaleDateString("cs-CZ") + " " + date.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+      const msg = c.commit.message.split("\n")[0]; // jen první řádek
+      const sha7 = c.sha.slice(0, 7);
+      const isHead = i === 0;
+      return `
+        <div style="padding:8px 14px; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:flex-start; font-family:var(--font-mono); font-size:11px;">
+          <div style="flex:1; min-width:0;">
+            <div style="color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(c.commit.message)}">
+              ${isHead ? '<span style="color:var(--accent); margin-right:4px;">HEAD</span>' : ''}
+              ${escapeHtml(msg)}
+            </div>
+            <div style="color:var(--text-dim); margin-top:2px;">
+              <span style="color:var(--yellow);">${sha7}</span> · ${escapeHtml(c.commit.author.name)} · ${dateStr}
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; flex-shrink:0;">
+            <button onclick="showCommitDiff('${c.sha}', '${escapeHtml(msg).replace(/'/g, "\\'")}')"
+              style="padding:3px 8px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text); cursor:pointer; font-size:10px; font-family:var(--font-mono);">
+              ⚡ Diff
+            </button>
+            ${!isHead ? `<button onclick="revertToCommit('${c.sha}', '${sha7}')"
+              style="padding:3px 8px; background:var(--surface2); border:1px solid var(--red); border-radius:4px; color:var(--red); cursor:pointer; font-size:10px; font-family:var(--font-mono);">
+              ↩ Vrátit
+            </button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (e) {
+    document.getElementById("commitHistoryList").innerHTML =
+      `<div style="padding:12px 14px; color:var(--red); font-size:11px; font-family:var(--font-mono);">Chyba: ${e.message}</div>`;
+  }
+});
+
+document.getElementById("closeHistoryPanel").addEventListener("click", () => {
+  document.getElementById("commitHistoryPanel").style.display = "none";
+});
+
+// Zobrazí diff konkrétního commitu vs předchozí verze
+async function showCommitDiff(commitSha, commitMsg) {
+  const diffPanel = document.getElementById("diffPanel");
+  const diffContent = document.getElementById("diffContent");
+  const diffTitle = document.getElementById("diffPanelTitle");
+
+  diffPanel.style.display = "block";
+  diffTitle.textContent = `⚡ Diff — ${commitMsg.slice(0, 40)}`;
+  diffContent.textContent = "Načítám diff...";
+
+  try {
+    // Načti obsah souboru v tomto commitu
+    const fileAtCommit = await ghFetch(
+      `/repos/${USERNAME}/${VIEWER_FILE.repo}/contents/${VIEWER_FILE.path}?ref=${commitSha}`
+    );
+    const newContent = decodeBase64Utf8(fileAtCommit.content);
+
+    // Načti detail commitu — obsahuje pole parents
+    const commitDetail = await ghFetch(
+      `/repos/${USERNAME}/${VIEWER_FILE.repo}/git/commits/${commitSha}`
+    );
+
+    let oldContent = "";
+    if (commitDetail.parents && commitDetail.parents.length > 0) {
+      const parentSha = commitDetail.parents[0].sha;
+      try {
+        const prev = await ghFetch(
+          `/repos/${USERNAME}/${VIEWER_FILE.repo}/contents/${VIEWER_FILE.path}?ref=${parentSha}`
+        );
+        oldContent = decodeBase64Utf8(prev.content);
+      } catch {
+        // Soubor v parent commitu neexistoval → byl přidán tímto commitem
+        oldContent = "";
+      }
+    }
+
+    renderDiff(oldContent, newContent, diffContent);
+  } catch (e) {
+    diffContent.textContent = "Chyba při načítání diffu: " + e.message;
+  }
+}
+
+document.getElementById("closeDiffPanel").addEventListener("click", () => {
+  document.getElementById("diffPanel").style.display = "none";
+});
+
+// Jednoduchý line diff — zobrazí přidané/odebrané řádky
+function renderDiff(oldText, newText, container) {
+  const oldLines = oldText.split("\n");
+  const newLines = newText.split("\n");
+
+  // Jednoduché LCS diff — porovnej řádky
+  const result = [];
+  const maxLines = Math.max(oldLines.length, newLines.length);
+
+  // Rychlý diff: projdi řádky paralelně
+  let o = 0, n = 0;
+  while (o < oldLines.length || n < newLines.length) {
+    const oldLine = oldLines[o];
+    const newLine = newLines[n];
+
+    if (o >= oldLines.length) {
+      result.push({ type: "add", line: newLine, n: n + 1 });
+      n++;
+    } else if (n >= newLines.length) {
+      result.push({ type: "del", line: oldLine, o: o + 1 });
+      o++;
+    } else if (oldLine === newLine) {
+      result.push({ type: "same", line: newLine, o: o + 1, n: n + 1 });
+      o++; n++;
+    } else {
+      // Zkus najít shodu v okolí (±3 řádky)
+      let foundInNew = -1, foundInOld = -1;
+      for (let look = 1; look <= 3; look++) {
+        if (n + look < newLines.length && newLines[n + look] === oldLine) { foundInNew = look; break; }
+      }
+      for (let look = 1; look <= 3; look++) {
+        if (o + look < oldLines.length && oldLines[o + look] === newLine) { foundInOld = look; break; }
+      }
+      if (foundInNew !== -1 && (foundInOld === -1 || foundInNew <= foundInOld)) {
+        for (let i = 0; i < foundInNew; i++) result.push({ type: "add", line: newLines[n + i], n: n + i + 1 });
+        n += foundInNew;
+      } else if (foundInOld !== -1) {
+        for (let i = 0; i < foundInOld; i++) result.push({ type: "del", line: oldLines[o + i], o: o + i + 1 });
+        o += foundInOld;
+      } else {
+        result.push({ type: "del", line: oldLine, o: o + 1 });
+        result.push({ type: "add", line: newLine, n: n + 1 });
+        o++; n++;
+      }
+    }
+  }
+
+  // Zobraz jen změny + 3 řádky kontextu
+  const CONTEXT = 3;
+  const changed = new Set(result.map((r, i) => r.type !== "same" ? i : -1).filter(i => i >= 0));
+  const show = new Set();
+  changed.forEach(i => {
+    for (let j = Math.max(0, i - CONTEXT); j <= Math.min(result.length - 1, i + CONTEXT); j++) show.add(j);
+  });
+
+  if (show.size === 0) {
+    container.innerHTML = `<span style="color:var(--accent);">✓ Soubory jsou identické</span>`;
+    return;
+  }
+
+  let html = "";
+  let lastShown = -1;
+  [...show].sort((a, b) => a - b).forEach(i => {
+    if (lastShown !== -1 && i > lastShown + 1) {
+      html += `<span style="color:var(--text-dim); display:block; padding:2px 0;">···</span>`;
+    }
+    const r = result[i];
+    const lineNum = r.type === "del" ? r.o : (r.n || "");
+    const bg = r.type === "add" ? "rgba(0,229,160,0.1)" : r.type === "del" ? "rgba(255,85,85,0.1)" : "transparent";
+    const prefix = r.type === "add" ? "+" : r.type === "del" ? "-" : " ";
+    const color = r.type === "add" ? "var(--accent)" : r.type === "del" ? "var(--red)" : "var(--text-dim)";
+    html += `<span style="display:block; background:${bg}; padding:1px 0;"><span style="color:var(--text-dim); user-select:none; margin-right:8px; display:inline-block; width:32px; text-align:right;">${lineNum}</span><span style="color:${color}; margin-right:6px;">${prefix}</span>${escapeHtml(r.line)}</span>`;
+    lastShown = i;
+  });
+
+  container.innerHTML = html;
+
+  // Stats
+  const adds = result.filter(r => r.type === "add").length;
+  const dels = result.filter(r => r.type === "del").length;
+  document.getElementById("diffPanelTitle").textContent =
+    `⚡ Diff · +${adds} -${dels} řádků`;
+}
+
+// Vrátí soubor na verzi z daného commitu
+async function revertToCommit(sha, sha7) {
+  if (!confirm(`Vrátit soubor "${VIEWER_FILE.name}" na verzi z commitu ${sha7}?\n\nToto vytvoří nový commit s touto starší verzí.`)) return;
+
+  try {
+    const fileAtCommit = await ghFetch(
+      `/repos/${USERNAME}/${VIEWER_FILE.repo}/contents/${VIEWER_FILE.path}?ref=${sha}`
+    );
+    const content = fileAtCommit.content.replace(/\n/g, "");
+
+    // Načti aktuální SHA souboru
+    const current = await ghFetch(
+      `/repos/${USERNAME}/${VIEWER_FILE.repo}/contents/${VIEWER_FILE.path}`
+    );
+
+    await ghFetch(`/repos/${USERNAME}/${VIEWER_FILE.repo}/contents/${VIEWER_FILE.path}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `revert: ${VIEWER_FILE.name} to ${sha7}`,
+        content: content,
+        sha: current.sha,
+      }),
+    });
+
+    toast(`✓ Soubor vrácen na verzi ${sha7}`);
+
+    // Aktualizuj viewer
+    const decoded = decodeBase64Utf8(content);
+    VIEWER_ORIGINAL_CONTENT = decoded;
+    VIEWER_IS_MODIFIED = false;
+    document.getElementById("fileViewerContent").textContent = decoded;
+    document.getElementById("commitHistoryPanel").style.display = "none";
+    document.getElementById("diffPanel").style.display = "none";
+  } catch (e) {
+    toast("Chyba při revertu: " + e.message, "error");
+  }
+}
+
+function decodeBase64Utf8(b64) {
+  const binaryStr = atob(b64.replace(/\n/g, ""));
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+// ─── Diff tlačítko ve file vieweru (porovnej s lokálním souborem) ───
+document.getElementById("fileDiffBtn").addEventListener("click", async () => {
+  const diffPanel = document.getElementById("diffPanel");
+  if (diffPanel.style.display !== "none") {
+    diffPanel.style.display = "none";
+    return;
+  }
+  // Otevři file picker pro lokální soubor
+  if (!window.showOpenFilePicker) {
+    toast("File System Access API není dostupné (Chrome/Edge).", "error");
+    return;
+  }
+  try {
+    const [fh] = await window.showOpenFilePicker({
+      suggestedName: VIEWER_FILE.name,
+    });
+    const file = await fh.getFile();
+    const localContent = await file.text();
+    const githubContent = VIEWER_ORIGINAL_CONTENT;
+
+    document.getElementById("diffPanel").style.display = "block";
+    const diffContent = document.getElementById("diffContent");
+    renderDiff(localContent, githubContent, diffContent);
+    document.getElementById("diffPanelTitle").textContent =
+      `⚡ Diff: lokální vs GitHub — ${VIEWER_FILE.name}`;
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Chyba: " + e.message, "error");
+  }
+});
 
 // Search functionality
 function performSearch() {
@@ -1796,34 +2073,47 @@ async function deleteSelectedItems(repo, currentPath) {
   const count = selectedRows.length;
   if (!confirm(`Smazat ${count} vybraných položek? Toto nelze vrátit.`)) return;
 
-  let deleted = 0;
-  let failed = 0;
-  toast(`Mažu... 0/${count}`, "success", 60000);
-
+  // Odděl složky od souborů
+  const dirs = [], files = [];
   for (const checkbox of selectedRows) {
     const row = checkbox.closest(".file-row");
     if (!row) continue;
-    const name = row.dataset.name;
-    const path = row.dataset.path;
-    const type = row.dataset.type;
+    if (row.dataset.type === "dir") dirs.push(row.dataset.path);
+    else files.push({ name: row.dataset.name, path: row.dataset.path });
+  }
+
+  showUploadProgress("Mažu...", 0, count);
+  let deleted = 0, failed = 0;
+
+  // Smaž složky dávkově — všechny najednou jedním Git commit (méně API requestů, žádná race condition)
+  if (dirs.length > 0) {
     try {
-      if (type === "dir") {
-        await deleteDir(repo, path);
-      } else {
-        const fileData = await ghFetch(`/repos/${USERNAME}/${repo}/contents/${path}`);
-        await ghFetch(`/repos/${USERNAME}/${repo}/contents/${path}`, {
-          method: "DELETE",
-          body: JSON.stringify({ message: `delete: ${name}`, sha: fileData.sha }),
-        });
-      }
+      await deleteDirsBatch(repo, dirs);
+      deleted += dirs.length;
+    } catch (err) {
+      failed += dirs.length;
+      toast(`Chyba při mazání složek: ${err.message}`, "error", 5000);
+    }
+    showUploadProgress("Mažu...", deleted + failed, count);
+  }
+
+  // Smaž jednotlivé soubory
+  for (const f of files) {
+    try {
+      const fileData = await ghFetch(`/repos/${USERNAME}/${repo}/contents/${f.path}`);
+      await ghFetch(`/repos/${USERNAME}/${repo}/contents/${f.path}`, {
+        method: "DELETE",
+        body: JSON.stringify({ message: `delete: ${f.name}`, sha: fileData.sha }),
+      });
       deleted++;
     } catch (err) {
       failed++;
-      toast(`Chyba: ${name}: ${err.message}`, "error", 4000);
+      toast(`Chyba: ${f.name}: ${err.message}`, "error", 4000);
     }
-    toast(`Mažu... ${deleted + failed}/${count}`, "success", 60000);
+    showUploadProgress("Mažu...", deleted + failed, count);
   }
 
+  hideUploadProgress();
   if (failed > 0) {
     toast(`Smazáno ${deleted}/${count}, ${failed} selhalo.`, "error");
   } else {
@@ -1832,60 +2122,56 @@ async function deleteSelectedItems(repo, currentPath) {
   openRepo(repo, currentPath);
 }
 
-// Smaže složku atomicky přes Git Data API (jeden commit, žádné SHA konflikty)
-async function deleteDir(repo, dirPath) {
-  // Krok 1: zjisti HEAD commit a branch
+// Smaže více složek najednou — jeden atomický Git commit (opraví race condition)
+async function deleteDirsBatch(repo, dirPaths) {
   const repoInfo = await ghFetch(`/repos/${USERNAME}/${repo}`);
   const branch = repoInfo.default_branch || "main";
   const refData = await ghFetch(`/repos/${USERNAME}/${repo}/git/ref/heads/${branch}`);
   const headCommitSha = refData.object.sha;
 
-  // Krok 2: načti celý strom (recursive=1 vrátí všechny soubory)
   const headCommit = await ghFetch(`/repos/${USERNAME}/${repo}/git/commits/${headCommitSha}`);
   const baseTreeSha = headCommit.tree.sha;
   const treeData = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees/${baseTreeSha}?recursive=1`);
   if (!treeData.tree) throw new Error("Nelze načíst strom repozitáře");
 
-  // Krok 3: najdi soubory ke smazání (jen blob položky uvnitř složky)
-  const prefix = dirPath.endsWith("/") ? dirPath : dirPath + "/";
-  const toDelete = treeData.tree.filter(item =>
-    item.type === "blob" && (item.path === dirPath || item.path.startsWith(prefix))
-  );
+  // Najdi všechny soubory v KTERÉKOLI ze smazávaných složek
+  const toDelete = treeData.tree.filter(item => {
+    if (item.type !== "blob") return false;
+    return dirPaths.some(dir => {
+      const prefix = dir.endsWith("/") ? dir : dir + "/";
+      return item.path === dir || item.path.startsWith(prefix);
+    });
+  });
 
-  if (toDelete.length === 0) return; // nic ke smazání
+  if (toDelete.length === 0) return;
 
-  // Krok 4: vytvoř nový tree pomocí base_tree + sha:null pro smazané soubory
-  // GitHub Git Trees API: sha:null = smaž tuto položku
   const deletionItems = toDelete.map(item => ({
-    path: item.path,
-    mode: item.mode || "100644",
-    type: "blob",
-    sha: null,  // null = smazat
+    path: item.path, mode: item.mode || "100644", type: "blob", sha: null,
   }));
 
   const newTree = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees`, {
     method: "POST",
-    body: JSON.stringify({
-      base_tree: baseTreeSha,  // základ = aktuální strom, jen aplikujeme změny
-      tree: deletionItems,
-    }),
+    body: JSON.stringify({ base_tree: baseTreeSha, tree: deletionItems }),
   });
 
-  // Krok 5: vytvoř nový commit
   const newCommit = await ghFetch(`/repos/${USERNAME}/${repo}/git/commits`, {
     method: "POST",
     body: JSON.stringify({
-      message: `delete: ${dirPath}`,
+      message: `delete: ${dirPaths.map(d => d.split("/").pop()).join(", ")}`,
       tree: newTree.sha,
       parents: [headCommitSha],
     }),
   });
 
-  // Krok 6: posuň HEAD na nový commit
   await ghFetch(`/repos/${USERNAME}/${repo}/git/refs/heads/${branch}`, {
     method: "PATCH",
     body: JSON.stringify({ sha: newCommit.sha }),
   });
+}
+
+// Smaže složku atomicky — wrapper nad deleteDirsBatch
+async function deleteDir(repo, dirPath) {
+  await deleteDirsBatch(repo, [dirPath]);
 }
 
 // close context modal on overlay click
@@ -1955,7 +2241,6 @@ async function uploadFileToGitHub(repo, uploadPath, base64Content, commitMsg) {
   });
 }
 
-// Hlavní upload funkce — files je pole { file, path } kde path je relativní cesta
 // ── Upload progress UI ──
 let _uploadProgressEl = null;
 
@@ -3383,19 +3668,25 @@ function previewHtmlFile(owner, repo, path, branch = 'main') {
 
 // ── Rate Limit Display ──
 function updateRateLimitDisplay() {
-  const el = document.getElementById('rateLimitBadge');
-  if (!el || RATE_LIMIT.remaining === null) return;
+  if (RATE_LIMIT.remaining === null) return;
+  const widget = document.getElementById('rateLimitWidget');
+  const bar = document.getElementById('rateLimitBar');
+  const count = document.getElementById('rateLimitCount');
+  if (!widget) return;
+
   const pct = RATE_LIMIT.limit ? RATE_LIMIT.remaining / RATE_LIMIT.limit : 1;
   const color = pct > 0.4 ? 'var(--accent)' : pct > 0.15 ? 'var(--yellow)' : 'var(--red)';
   const resetMin = RATE_LIMIT.reset
     ? Math.max(0, Math.ceil((RATE_LIMIT.reset * 1000 - Date.now()) / 60000))
     : '?';
-  el.style.display = 'flex';
-  el.innerHTML = `
-    <span style="color:${color}; font-size:10px;">⬤</span>
-    API: <strong style="color:${color}">${RATE_LIMIT.remaining}</strong><span style="opacity:.7;">/${RATE_LIMIT.limit}</span>
-    <span style="opacity:.6; font-size:10px; margin-left:4px;">reset za ${resetMin} min</span>
-  `;
+
+  widget.style.display = 'flex';
+  if (bar) bar.style.cssText = `height:100%; background:${color}; transition:width 0.3s; width:${Math.round(pct * 100)}%;`;
+  if (count) count.innerHTML = `<span style="color:${color}; font-weight:600;">${RATE_LIMIT.remaining}</span><span style="opacity:.6;">/${RATE_LIMIT.limit} · ${resetMin}min</span>`;
+
+  // Starý badge pokud existuje
+  const oldBadge = document.getElementById('rateLimitBadge');
+  if (oldBadge) oldBadge.style.display = 'none';
 }
 
 // ── Search History ──
@@ -3916,13 +4207,7 @@ document.getElementById("syncAnalyzeBtn").addEventListener("click", async () => 
 
 // Výpočet Git blob SHA (sha1 of "blob <size>\0<content>")
 async function computeGitBlobSha(file) {
-  const buffer = await file.arrayBuffer();
-  const header = new TextEncoder().encode(`blob ${buffer.byteLength}\0`);
-  const combined = new Uint8Array(header.byteLength + buffer.byteLength);
-  combined.set(header, 0);
-  combined.set(new Uint8Array(buffer), header.byteLength);
-  const hashBuffer = await crypto.subtle.digest("SHA-1", combined);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return computeLocalBlobSha(file); // alias — stejná funkce
 }
 
 function renderSyncAnalysis(analysis) {

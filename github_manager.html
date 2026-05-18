@@ -55,6 +55,14 @@
         style="margin-left: auto; display: flex; align-items: center; gap: 8px"
         id="logoutArea"
       >
+        <!-- RATE LIMIT INDIKÁTOR -->
+        <div id="rateLimitWidget" style="display:none; align-items:center; gap:6px; font-size:10px; font-family:var(--font-mono); color:var(--text-dim);">
+          <span id="rateLimitLabel">API</span>
+          <div style="width:60px; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden;">
+            <div id="rateLimitBar" style="height:100%; background:var(--accent); transition:width 0.3s; width:100%;"></div>
+          </div>
+          <span id="rateLimitCount" style="min-width:60px;"></span>
+        </div>
         <button
           class="btn-cancel"
           id="logoutBtn"
@@ -566,6 +574,12 @@
           </div>
         </div>
         <div class="file-viewer-actions">
+          <button class="btn-secondary" id="fileHistoryBtn" style="flex:1;">
+            📋 Historie commitů
+          </button>
+          <button class="btn-secondary" id="fileDiffBtn" style="flex:1; display:none;">
+            ⚡ Diff s local
+          </button>
           <button
             class="btn-confirm"
             id="saveFileBtn"
@@ -576,6 +590,24 @@
           <button class="btn-confirm" id="downloadFromViewer" style="flex: 1">
             ⬇️ Stáhnout soubor
           </button>
+        </div>
+
+        <!-- COMMIT HISTORY PANEL -->
+        <div id="commitHistoryPanel" style="display:none; border-top:1px solid var(--border); background:var(--bg); max-height:260px; overflow-y:auto;">
+          <div style="padding:10px 14px; font-size:11px; color:var(--text-dim); font-family:var(--font-mono); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <span>📋 Commit historie souboru</span>
+            <button class="btn-icon" id="closeHistoryPanel" style="font-size:12px;">✕</button>
+          </div>
+          <div id="commitHistoryList" style="padding:4px 0;"></div>
+        </div>
+
+        <!-- DIFF PANEL -->
+        <div id="diffPanel" style="display:none; border-top:1px solid var(--border); background:var(--bg); max-height:300px; overflow-y:auto;">
+          <div style="padding:10px 14px; font-size:11px; color:var(--text-dim); font-family:var(--font-mono); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <span id="diffPanelTitle">⚡ Diff</span>
+            <button class="btn-icon" id="closeDiffPanel" style="font-size:12px;">✕</button>
+          </div>
+          <pre id="diffContent" style="margin:0; padding:12px 14px; font-family:var(--font-mono); font-size:11px; line-height:1.5; white-space:pre-wrap; word-break:break-all;"></pre>
         </div>
       </div>
     </div>
