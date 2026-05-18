@@ -377,17 +377,30 @@ function renderFileList(repoInfo, repoName, path) {
         <div class="stat">⭐ <span>${repoInfo.stargazers_count}</span></div>
         <div class="stat">🔀 <span>${repoInfo.forks_count}</span></div>
         <div class="stat">📝 <span>${repoInfo.open_issues_count} issues</span></div>
+        <button class="btn-secondary" onclick="openCloneModal('${repoName}', '${repoInfo.clone_url}', '${repoInfo.ssh_url}')" style="font-size:11px; padding:4px 10px; margin-left:8px;" title="Clone / Git příkazy">🔗 Clone</button>
       </div>
     </div>
     <div class="toolbar-actions">
       <button class="btn-secondary" id="uploadFilesBtn">
         <span>📤</span> Nahrát soubory
       </button>
+      <button class="btn-secondary" id="uploadFolderBtn">
+        <span>📁</span> Nahrát složku
+      </button>
+      <button class="btn-secondary" id="uploadFolderContentsBtn" title="Nahraje obsah složky bez samotné složky — soubory půjdou přímo do aktuálního umístění">
+        <span>📂</span> Nahrát obsah složky
+      </button>
+      <button class="btn-secondary" id="uploadSmartSyncBtn" title="Porovná SHA souborů s GitHubem a nahraje jen chybějící nebo změněné soubory" style="color:var(--accent); border-color:var(--accent);">
+        <span>⚡</span> Smart sync složky
+      </button>
       <button class="btn-secondary" id="selectAllBtn">
         <span>☑️</span> Vybrat vše
       </button>
       <button class="btn-secondary" id="deselectAllBtn" style="display:none;">
         <span>⬜</span> Zrušit výběr
+      </button>
+      <button class="btn-secondary" id="deleteSelectedBtn" style="display:none; color:var(--red); border-color:var(--red);">
+        <span>🗑️</span> Smazat vybrané
       </button>
       <button class="btn-secondary" id="newFileBtn" onclick="openNewFileModal()" style="background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600;">
         <span>➕</span> Nový soubor/složka
@@ -416,7 +429,18 @@ function renderFileList(repoInfo, repoName, path) {
       </tr>
     `;
   });
-  html += "</tbody></table>";
+  html += `</tbody></table>`;
+
+  // Viditelná drag&drop zóna
+  html += `
+    <div class="inline-drop-zone" id="inlineDropZone">
+      <div class="inline-drop-content">
+        <span class="drop-icon">📤</span>
+        <span class="drop-text">Přetáhni sem soubory nebo více složek najednou</span>
+        <span class="drop-sub">Tlačítko "Nahrát složku" = vždy jedna složka, drag&drop = neomezený počet</span>
+      </div>
+    </div>
+  `;
   view.innerHTML = html;
 
   // bind click events on rows
@@ -522,6 +546,7 @@ function renderFileList(repoInfo, repoName, path) {
   const rowCheckboxes = view.querySelectorAll(".row-checkbox");
   const selectAllBtn = document.getElementById("selectAllBtn");
   const deselectAllBtn = document.getElementById("deselectAllBtn");
+  const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
 
   function updateSelectionUI() {
     const checkedCount = Array.from(rowCheckboxes).filter(
@@ -531,10 +556,15 @@ function renderFileList(repoInfo, repoName, path) {
       deselectAllBtn.style.display = "inline-flex";
       selectAllBtn.style.display = "none";
       selectAllCb.checked = checkedCount === rowCheckboxes.length;
+      if (deleteSelectedBtn) {
+        deleteSelectedBtn.style.display = "inline-flex";
+        deleteSelectedBtn.textContent = `🗑️ Smazat (${checkedCount})`;
+      }
     } else {
       deselectAllBtn.style.display = "none";
       selectAllBtn.style.display = "inline-flex";
       selectAllCb.checked = false;
+      if (deleteSelectedBtn) deleteSelectedBtn.style.display = "none";
     }
   }
 
@@ -555,12 +585,17 @@ function renderFileList(repoInfo, repoName, path) {
     updateSelectionUI();
   });
 
+  if (deleteSelectedBtn) {
+    deleteSelectedBtn.addEventListener("click", () => {
+      deleteSelectedItems(repoName, path);
+    });
+  }
+
   rowCheckboxes.forEach((cb) => {
     cb.addEventListener("change", (e) => {
       e.stopPropagation();
       updateSelectionUI();
     });
-    // Zabránit kliknutí na checkbox od otevření souboru
     cb.addEventListener("click", (e) => {
       e.stopPropagation();
     });
@@ -571,6 +606,47 @@ function renderFileList(repoInfo, repoName, path) {
   if (uploadBtn) {
     uploadBtn.addEventListener("click", () => {
       openFileUploadDialog(repoName, path);
+    });
+  }
+
+  // Upload folder button (se složkou jako prefixem)
+  const uploadFolderBtn = document.getElementById("uploadFolderBtn");
+  if (uploadFolderBtn) {
+    uploadFolderBtn.addEventListener("click", () => {
+      openFileUploadDialog(repoName, path, "folder");
+    });
+  }
+
+  // Upload folder CONTENTS button (bez prefixu složky)
+  const uploadFolderContentsBtn = document.getElementById("uploadFolderContentsBtn");
+  if (uploadFolderContentsBtn) {
+    uploadFolderContentsBtn.addEventListener("click", () => {
+      openFileUploadDialog(repoName, path, "contents");
+    });
+  }
+
+  // Smart sync button — nahraje jen chybějící/změněné soubory
+  const uploadSmartSyncBtn = document.getElementById("uploadSmartSyncBtn");
+  if (uploadSmartSyncBtn) {
+    uploadSmartSyncBtn.addEventListener("click", () => {
+      openFileUploadDialog(repoName, path, "smartsync");
+    });
+  }
+
+  // Inline drop zone — jen klik (drop zpracuje mainContent handler výše)
+  const inlineDropZone = document.getElementById("inlineDropZone");
+  if (inlineDropZone) {
+    inlineDropZone.addEventListener("click", () => {
+      openFileUploadDialog(repoName, path);
+    });
+    // Vizuální highlight při hoveru (drag eventy probublají na mainContent)
+    inlineDropZone.addEventListener("dragenter", (e) => {
+      inlineDropZone.classList.add("drag-active");
+    });
+    inlineDropZone.addEventListener("dragleave", (e) => {
+      if (!inlineDropZone.contains(e.relatedTarget)) {
+        inlineDropZone.classList.remove("drag-active");
+      }
     });
   }
 }
@@ -1168,12 +1244,16 @@ document
 //  FILE VIEWER MODAL
 // ═══════════════════════════════════════
 let VIEWER_FILE = {};
+let VIEWER_FILE_SHA = "";
+let VIEWER_IS_MODIFIED = false;
 let VIEWER_ORIGINAL_CONTENT = "";
 let VIEWER_SEARCH_MATCHES = [];
 let VIEWER_CURRENT_MATCH = -1;
 
 async function openFileViewer(name, path, repo) {
   VIEWER_FILE = { name, path, repo };
+  VIEWER_FILE_SHA = "";
+  VIEWER_IS_MODIFIED = false;
   VIEWER_SEARCH_MATCHES = [];
   VIEWER_CURRENT_MATCH = -1;
 
@@ -1203,6 +1283,8 @@ async function openFileViewer(name, path, repo) {
     const content = new TextDecoder("utf-8").decode(bytes);
 
     VIEWER_ORIGINAL_CONTENT = content;
+    VIEWER_FILE_SHA = fileData.sha;
+    document.getElementById("saveFileBtn").style.display = "none";
     document.getElementById("fileViewerContent").textContent = content;
     document.getElementById("viewerFileMeta").textContent =
       formatBytes(content.length) +
@@ -1523,6 +1605,11 @@ function openFileContext(name, path, type, size, repo) {
     <span class="ctx-icon">⬇️</span>
     <div><div class="ctx-label">Stáhnout soubor</div><div class="ctx-desc">Uloží soubor na tvůj počítač</div></div>
   </button>`;
+  } else {
+    btns += `<button class="ctx-btn" id="ctxDownload">
+    <span class="ctx-icon">📦</span>
+    <div><div class="ctx-label">Stáhnout složku jako ZIP</div><div class="ctx-desc">Stáhne celou složku se soubory</div></div>
+  </button>`;
   }
   btns += `<button class="ctx-btn" id="ctxRename">
   <span class="ctx-icon">✏️</span>
@@ -1563,19 +1650,40 @@ function openFileContext(name, path, type, size, repo) {
   const dlBtn = document.getElementById("ctxDownload");
   if (dlBtn) {
     dlBtn.onclick = async () => {
-      try {
-        const fileData = await ghFetch(
-          `/repos/${USERNAME}/${CTX_FILE.repo}/contents/${CTX_FILE.path}`,
-        );
-        const bytes = Uint8Array.from(atob(fileData.content), (c) =>
-          c.charCodeAt(0),
-        );
-        const blob = new Blob([bytes]);
-        downloadBlob(blob, CTX_FILE.name);
+      if (CTX_FILE.type === "dir") {
+        // Stáhnout složku jako ZIP
         document.getElementById("ctxModal").style.display = "none";
-        toast("Soubor „" + CTX_FILE.name + '" stáhnut.');
-      } catch (e) {
-        toast("Chyba při stáhnutí: " + e.message, "error");
+        toast(`Připravuji ZIP pro složku "${CTX_FILE.name}"...`);
+        try {
+          const files = await fetchAllFiles(CTX_FILE.repo, CTX_FILE.path);
+          if (!files || files.length === 0) {
+            toast("Složka je prázdná nebo nelze načíst.", "error");
+            return;
+          }
+          const zipBlob = buildZip(files.map(f => ({
+            path: f.path.replace(CTX_FILE.repo + '/', ''),
+            content: f.content,
+          })));
+          downloadBlob(zipBlob, `${CTX_FILE.name}.zip`);
+          toast(`Složka "${CTX_FILE.name}" stáhnuta jako ZIP`);
+        } catch (e) {
+          toast("Chyba při stáhnutí složky: " + e.message, "error");
+        }
+      } else {
+        try {
+          const fileData = await ghFetch(
+            `/repos/${USERNAME}/${CTX_FILE.repo}/contents/${CTX_FILE.path}`,
+          );
+          const bytes = Uint8Array.from(atob(fileData.content), (c) =>
+            c.charCodeAt(0),
+          );
+          const blob = new Blob([bytes]);
+          downloadBlob(blob, CTX_FILE.name);
+          document.getElementById("ctxModal").style.display = "none";
+          toast("Soubor „" + CTX_FILE.name + '" stáhnut.');
+        } catch (e) {
+          toast("Chyba při stáhnutí: " + e.message, "error");
+        }
       }
     };
   }
@@ -1624,10 +1732,10 @@ function openFileContext(name, path, type, size, repo) {
         await ghFetch(
           `/repos/${USERNAME}/${CTX_FILE.repo}/contents/${newPath}`,
           {
-            method: "POST",
+            method: "PUT",
             body: JSON.stringify({
               message: `rename: ${CTX_FILE.name} → ${newName}`,
-              content: fileData.content,
+              content: fileData.content.replace(/\n/g, ""),
             }),
           },
         );
@@ -1678,24 +1786,106 @@ function openFileContext(name, path, type, size, repo) {
   };
 }
 
-// recursively delete a folder (GitHub has no folder-delete endpoint)
-async function deleteDir(repo, dirPath) {
-  const items = await ghFetch(
-    `/repos/${USERNAME}/${repo}/contents/${dirPath}`,
-  );
-  for (const item of items) {
-    if (item.type === "dir") {
-      await deleteDir(repo, item.path);
-    } else {
-      await ghFetch(`/repos/${USERNAME}/${repo}/contents/${item.path}`, {
-        method: "DELETE",
-        body: JSON.stringify({
-          message: `delete: ${item.path}`,
-          sha: item.sha,
-        }),
-      });
+// ═══════════════════════════════════════
+//  DELETE SELECTED ITEMS
+// ═══════════════════════════════════════
+async function deleteSelectedItems(repo, currentPath) {
+  const selectedRows = Array.from(document.querySelectorAll(".row-checkbox:checked"));
+  if (!selectedRows.length) return;
+
+  const count = selectedRows.length;
+  if (!confirm(`Smazat ${count} vybraných položek? Toto nelze vrátit.`)) return;
+
+  let deleted = 0;
+  let failed = 0;
+  toast(`Mažu... 0/${count}`, "success", 60000);
+
+  for (const checkbox of selectedRows) {
+    const row = checkbox.closest(".file-row");
+    if (!row) continue;
+    const name = row.dataset.name;
+    const path = row.dataset.path;
+    const type = row.dataset.type;
+    try {
+      if (type === "dir") {
+        await deleteDir(repo, path);
+      } else {
+        const fileData = await ghFetch(`/repos/${USERNAME}/${repo}/contents/${path}`);
+        await ghFetch(`/repos/${USERNAME}/${repo}/contents/${path}`, {
+          method: "DELETE",
+          body: JSON.stringify({ message: `delete: ${name}`, sha: fileData.sha }),
+        });
+      }
+      deleted++;
+    } catch (err) {
+      failed++;
+      toast(`Chyba: ${name}: ${err.message}`, "error", 4000);
     }
+    toast(`Mažu... ${deleted + failed}/${count}`, "success", 60000);
   }
+
+  if (failed > 0) {
+    toast(`Smazáno ${deleted}/${count}, ${failed} selhalo.`, "error");
+  } else {
+    toast(`✓ Smazáno ${deleted} položek.`);
+  }
+  openRepo(repo, currentPath);
+}
+
+// Smaže složku atomicky přes Git Data API (jeden commit, žádné SHA konflikty)
+async function deleteDir(repo, dirPath) {
+  // Krok 1: zjisti HEAD commit a branch
+  const repoInfo = await ghFetch(`/repos/${USERNAME}/${repo}`);
+  const branch = repoInfo.default_branch || "main";
+  const refData = await ghFetch(`/repos/${USERNAME}/${repo}/git/ref/heads/${branch}`);
+  const headCommitSha = refData.object.sha;
+
+  // Krok 2: načti celý strom (recursive=1 vrátí všechny soubory)
+  const headCommit = await ghFetch(`/repos/${USERNAME}/${repo}/git/commits/${headCommitSha}`);
+  const baseTreeSha = headCommit.tree.sha;
+  const treeData = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees/${baseTreeSha}?recursive=1`);
+  if (!treeData.tree) throw new Error("Nelze načíst strom repozitáře");
+
+  // Krok 3: najdi soubory ke smazání (jen blob položky uvnitř složky)
+  const prefix = dirPath.endsWith("/") ? dirPath : dirPath + "/";
+  const toDelete = treeData.tree.filter(item =>
+    item.type === "blob" && (item.path === dirPath || item.path.startsWith(prefix))
+  );
+
+  if (toDelete.length === 0) return; // nic ke smazání
+
+  // Krok 4: vytvoř nový tree pomocí base_tree + sha:null pro smazané soubory
+  // GitHub Git Trees API: sha:null = smaž tuto položku
+  const deletionItems = toDelete.map(item => ({
+    path: item.path,
+    mode: item.mode || "100644",
+    type: "blob",
+    sha: null,  // null = smazat
+  }));
+
+  const newTree = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees`, {
+    method: "POST",
+    body: JSON.stringify({
+      base_tree: baseTreeSha,  // základ = aktuální strom, jen aplikujeme změny
+      tree: deletionItems,
+    }),
+  });
+
+  // Krok 5: vytvoř nový commit
+  const newCommit = await ghFetch(`/repos/${USERNAME}/${repo}/git/commits`, {
+    method: "POST",
+    body: JSON.stringify({
+      message: `delete: ${dirPath}`,
+      tree: newTree.sha,
+      parents: [headCommitSha],
+    }),
+  });
+
+  // Krok 6: posuň HEAD na nový commit
+  await ghFetch(`/repos/${USERNAME}/${repo}/git/refs/heads/${branch}`, {
+    method: "PATCH",
+    body: JSON.stringify({ sha: newCommit.sha }),
+  });
 }
 
 // close context modal on overlay click
@@ -1708,48 +1898,272 @@ document.getElementById("ctxModal").addEventListener("click", (e) => {
 // ═══════════════════════════════════════
 //  FILE UPLOAD
 // ═══════════════════════════════════════
-function openFileUploadDialog(repo, path) {
+
+// Sestaví mapu path→sha pro celý adresářový strom jedním průchodem
+// Slouží k tomu, abychom nepotřebovali GET pro každý soubor zvlášť
+async function buildShaCache(repo, rootPath = "") {
+  const cache = new Map(); // "path/to/file.js" → "sha..."
+  async function scan(dirPath) {
+    try {
+      const endpoint = dirPath
+        ? `/repos/${USERNAME}/${repo}/contents/${dirPath}`
+        : `/repos/${USERNAME}/${repo}/contents`;
+      const items = await ghFetch(endpoint);
+      if (!Array.isArray(items)) return;
+      for (const item of items) {
+        if (item.type === "dir") {
+          await scan(item.path);
+        } else {
+          cache.set(item.path, item.sha);
+        }
+      }
+    } catch (e) {
+      // složka neexistuje nebo chyba → prostě prázdný cache pro tuto větev
+    }
+  }
+  await scan(rootPath);
+  return cache;
+}
+
+// Nahraje jeden soubor — používá SHA z cache (žádný extra GET)
+async function uploadFileWithCache(repo, uploadPath, base64Content, commitMsg, shaCache) {
+  const sha = shaCache ? shaCache.get(uploadPath) : null;
+  const body = { message: commitMsg, content: base64Content };
+  if (sha) body.sha = sha;
+  await ghFetch(`/repos/${USERNAME}/${repo}/contents/${uploadPath}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+  // Aktualizuj cache pro případné opakované uploady
+  if (shaCache) shaCache.set(uploadPath, "pending");
+}
+
+// Fallback pro jednotlivé soubory (bez cache — zachováno pro zpětnou kompatibilitu)
+async function uploadFileToGitHub(repo, uploadPath, base64Content, commitMsg) {
+  let sha = null;
+  try {
+    const existing = await ghFetch(`/repos/${USERNAME}/${repo}/contents/${uploadPath}`);
+    if (existing && existing.sha) sha = existing.sha;
+  } catch (e) {
+    // 404 = soubor neexistuje → sha null → create
+  }
+  const body = { message: commitMsg, content: base64Content };
+  if (sha) body.sha = sha;
+  await ghFetch(`/repos/${USERNAME}/${repo}/contents/${uploadPath}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// Hlavní upload funkce — files je pole { file, path } kde path je relativní cesta
+// ── Upload progress UI ──
+let _uploadProgressEl = null;
+
+function showUploadProgress(text, current, total) {
+  // Pokud panel neexistuje, vytvoř ho
+  if (!_uploadProgressEl) {
+    _uploadProgressEl = document.createElement("div");
+    _uploadProgressEl.id = "uploadProgressPanel";
+    _uploadProgressEl.style.cssText = `
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--surface); border: 1px solid var(--accent);
+      border-radius: 10px; padding: 14px 20px; min-width: 320px; max-width: 480px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4); z-index: 9999;
+      font-family: var(--font-mono); font-size: 12px;
+    `;
+    _uploadProgressEl.innerHTML = `
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+        <span id="uprogLabel" style="color:var(--text);"></span>
+        <span id="uprogCount" style="color:var(--accent); font-weight:600;"></span>
+      </div>
+      <div style="background:var(--bg); border-radius:4px; height:6px; overflow:hidden;">
+        <div id="uprogBar" style="height:100%; background:var(--accent); transition:width 0.15s; width:0%;"></div>
+      </div>
+      <div id="uprogSub" style="margin-top:6px; color:var(--text-dim); font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+    `;
+    document.body.appendChild(_uploadProgressEl);
+  }
+  _uploadProgressEl.style.display = "block";
+  document.getElementById("uprogLabel").textContent = text;
+  document.getElementById("uprogCount").textContent = total > 0 ? `${current} / ${total}` : "";
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+  document.getElementById("uprogBar").style.width = pct + "%";
+}
+
+function updateUploadProgressFile(fileName) {
+  const sub = document.getElementById("uprogSub");
+  if (sub) sub.textContent = fileName;
+}
+
+function hideUploadProgress() {
+  if (_uploadProgressEl) {
+    _uploadProgressEl.style.display = "none";
+    _uploadProgressEl = null; // reset pro příště
+    const el = document.getElementById("uploadProgressPanel");
+    if (el) el.remove();
+  }
+}
+
+async function runUpload(repo, currentPath, files) {
+  const total = files.length;
+  if (total === 0) return;
+
+  showUploadProgress("Načítám strukturu...", 0, total);
+
+  // Zjisti kořenové složky pro SHA cache
+  const uploadRoots = new Set();
+  for (const { path: filePath } of files) {
+    const parts = filePath.split("/");
+    if (parts.length > 1) {
+      const root = currentPath ? `${currentPath}/${parts[0]}` : parts[0];
+      uploadRoots.add(root);
+    } else {
+      uploadRoots.add("__root__");
+    }
+  }
+
+  // Sestav SHA cache
+  const shaCache = new Map();
+  for (const root of uploadRoots) {
+    const scanPath = root === "__root__" ? currentPath : root;
+    try {
+      const sub = await buildShaCache(repo, scanPath);
+      sub.forEach((sha, path) => shaCache.set(path, sha));
+    } catch (e) {}
+  }
+  if (uploadRoots.has("__root__") && currentPath) {
+    try {
+      const sub = await buildShaCache(repo, currentPath);
+      sub.forEach((sha, path) => shaCache.set(path, sha));
+    } catch (e) {}
+  }
+
+  showUploadProgress("Nahrávám...", 0, total);
+
+  let uploaded = 0;
+  let failed = 0;
+  const failedNames = [];
+
+  for (const { file, path: filePath } of files) {
+    updateUploadProgressFile(filePath);
+    try {
+      const content = await readFileAsBase64(file);
+      const uploadPath = currentPath ? `${currentPath}/${filePath}` : filePath;
+      await uploadFileWithCache(repo, uploadPath, content, `Upload: ${filePath}`, shaCache);
+      uploaded++;
+    } catch (err) {
+      failed++;
+      failedNames.push(filePath.split("/").pop());
+    }
+    showUploadProgress("Nahrávám...", uploaded + failed, total);
+  }
+
+  hideUploadProgress();
+
+  if (failed > 0) {
+    toast(`Nahráno ${uploaded}/${total}. Chyba u: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? ` +${failedNames.length - 3}` : ""}`, "error", 8000);
+  } else {
+    toast(`✓ Nahráno ${uploaded} soubor${uploaded > 1 ? "ů" : ""}!`);
+  }
+  openRepo(repo, currentPath);
+}
+
+// mode: "files" = normální soubory, "folder" = složka se zachovaným prefixem,
+//        "contents" = obsah složky bez prefixu, "smartsync" = obsah složky, jen rozdíly
+function openFileUploadDialog(repo, path, mode = "files") {
   const input = document.createElement("input");
   input.type = "file";
   input.multiple = true;
+  if (mode === "folder" || mode === "contents" || mode === "smartsync") {
+    input.webkitdirectory = true;
+    input.directory = true;
+  }
   input.onchange = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
+    const rawFiles = Array.from(e.target.files);
+    if (!rawFiles.length) return;
 
-    toast(
-      `Nahrávám ${files.length} soubor${files.length > 1 ? "ů" : ""}...`,
-    );
+    // Normalizuj relativní cestu
+    const normalize = (f) => {
+      const rel = f.webkitRelativePath || f.name;
+      if (mode === "contents" || mode === "smartsync") {
+        // Odřízni první segment (název vybrané složky)
+        return rel.indexOf("/") !== -1 ? rel.slice(rel.indexOf("/") + 1) : rel;
+      }
+      return rel;
+    };
 
-    let uploaded = 0;
-    for (const file of files) {
+    let files = rawFiles.map(f => ({ file: f, path: normalize(f) }));
+
+    if (mode === "smartsync") {
+      // Porovnej SHA lokálních souborů s GitHubem — nahraje jen rozdíly
+      showUploadProgress("Načítám strom GitHubu...", 0, 0);
       try {
-        const content = await readFileAsBase64(file);
-        const uploadPath = path ? `${path}/${file.name}` : file.name;
+        // Získej celý strom repo jedním requestem
+        const repoInfo = await ghFetch(`/repos/${USERNAME}/${repo}`);
+        const branch = repoInfo.default_branch || "main";
+        const refData = await ghFetch(`/repos/${USERNAME}/${repo}/git/ref/heads/${branch}`);
+        const treeData = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees/${refData.object.sha}?recursive=1`);
 
-        await ghFetch(
-          `/repos/${USERNAME}/${repo}/contents/${uploadPath}`,
-          {
-            method: "PUT",
-            body: JSON.stringify({
-              message: `Upload: ${file.name}`,
-              content: content,
-            }),
-          },
-        );
-        uploaded++;
+        // Postav mapu path → blob sha
+        const ghShaMap = new Map();
+        const prefix = path ? path + "/" : "";
+        for (const item of (treeData.tree || [])) {
+          if (item.type !== "blob") continue;
+          // Relativní cesta vůči aktuální složce
+          if (path && !item.path.startsWith(prefix)) continue;
+          const rel = path ? item.path.slice(prefix.length) : item.path;
+          ghShaMap.set(rel, item.sha);
+        }
+
+        // Porovnej SHA lokálních souborů
+        showUploadProgress("Porovnávám soubory...", 0, files.length);
+        const toUpload = [];
+        let same = 0;
+        for (const f of files) {
+          const ghSha = ghShaMap.get(f.path);
+          if (!ghSha) {
+            // Soubor na GitHubu chybí → nahrát
+            toUpload.push(f);
+          } else {
+            // Porovnej SHA
+            const localSha = await computeLocalBlobSha(f.file);
+            if (localSha !== ghSha) {
+              toUpload.push(f);
+            } else {
+              same++;
+            }
+          }
+        }
+
+        if (toUpload.length === 0) {
+          hideUploadProgress();
+          toast(`✓ Vše je aktuální — ${same} souborů shodných, nic k nahrání.`);
+          return;
+        }
+
+        toast(`Smart sync: ${toUpload.length} změn, ${same} shodných — nahrávám...`);
+        files = toUpload;
       } catch (err) {
-        toast(`Chyba při nahrání ${file.name}: ${err.message}`, "error");
+        hideUploadProgress();
+        toast("Chyba při porovnání: " + err.message, "error");
+        return;
       }
     }
 
-    if (uploaded > 0) {
-      toast(
-        `Nahráno ${uploaded} z ${files.length} soubor${uploaded > 1 ? "ů" : ""}!`,
-      );
-      openRepo(repo, path);
-    }
+    await runUpload(repo, path, files);
   };
   input.click();
+}
+
+// Výpočet Git blob SHA pro lokální soubor (sha1 of "blob <size>\0<content>")
+async function computeLocalBlobSha(file) {
+  const buffer = await file.arrayBuffer();
+  const header = new TextEncoder().encode(`blob ${buffer.byteLength}\0`);
+  const combined = new Uint8Array(header.byteLength + buffer.byteLength);
+  combined.set(header, 0);
+  combined.set(new Uint8Array(buffer), header.byteLength);
+  const hashBuffer = await crypto.subtle.digest("SHA-1", combined);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 function readFileAsBase64(file) {
@@ -1767,126 +2181,115 @@ function readFileAsBase64(file) {
 // ═══════════════════════════════════════
 //  DRAG & DROP FUNCTIONALITY
 // ═══════════════════════════════════════
-function setupDragAndDrop() {
-  const overlay = document.getElementById("dragDropOverlay");
-  const content = document.getElementById("mainContent");
-  let dragCounter = 0;
 
-  // Prevent default drag behaviors
-  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-    document.body.addEventListener(eventName, preventDefaults, false);
+// Spolehlivé načtení všech souborů z FileSystemEntry (včetně složek)
+function readAllEntries(dirReader) {
+  return new Promise((resolve) => {
+    let all = [];
+    const read = () => {
+      dirReader.readEntries((entries) => {
+        if (entries.length === 0) {
+          resolve(all);
+        } else {
+          all = all.concat(Array.from(entries));
+          read(); // čti dokud nejsou prázdné (max 100 na volání)
+        }
+      }, () => resolve(all)); // chyba → vrať co máme
+    };
+    read();
+  });
+}
+
+async function processDropEntry(entry, relativePath, fileList) {
+  if (entry.isFile) {
+    await new Promise((resolve) => {
+      entry.file((file) => {
+        fileList.push({ file, path: relativePath + file.name });
+        resolve();
+      }, resolve); // chyba → přeskoč
+    });
+  } else if (entry.isDirectory) {
+    const entries = await readAllEntries(entry.createReader());
+    for (const child of entries) {
+      await processDropEntry(child, relativePath + entry.name + "/", fileList);
+    }
+  }
+}
+
+async function collectDroppedFiles(dataTransfer) {
+  const fileList = [];
+  const items = Array.from(dataTransfer.items || []);
+  for (const item of items) {
+    if (item.kind !== "file") continue;
+    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    if (entry) {
+      await processDropEntry(entry, "", fileList);
+    } else {
+      // fallback pro browsery bez webkitGetAsEntry
+      const file = item.getAsFile();
+      if (file) fileList.push({ file, path: file.name });
+    }
+  }
+  return fileList;
+}
+
+async function uploadDroppedFiles(files, repo, currentPath) {
+  await runUpload(repo, currentPath, files);
+}
+
+function setupDragAndDrop() {
+  const mainContent = document.getElementById("mainContent");
+
+  // Zabraň výchozímu chování browseru pro drag eventy globálně
+  document.addEventListener("dragover", (e) => e.preventDefault(), false);
+  document.addEventListener("drop", (e) => e.preventDefault(), false);
+
+  // Drag vizuál — jen na mainContent oblasti
+  mainContent.addEventListener("dragenter", (e) => {
+    if (!CURRENT_REPO) return;
+    e.preventDefault();
+    mainContent.classList.add("drag-over");
+    const inlineZone = document.getElementById("inlineDropZone");
+    if (inlineZone) inlineZone.classList.add("drag-active");
   });
 
-  function preventDefaults(e) {
+  mainContent.addEventListener("dragover", (e) => {
+    if (!CURRENT_REPO) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+
+  mainContent.addEventListener("dragleave", (e) => {
+    // Jen pokud opouštíme mainContent úplně (ne jen přecházíme na child element)
+    if (!mainContent.contains(e.relatedTarget)) {
+      mainContent.classList.remove("drag-over");
+      const inlineZone = document.getElementById("inlineDropZone");
+      if (inlineZone) inlineZone.classList.remove("drag-active");
+    }
+  });
+
+  mainContent.addEventListener("drop", async (e) => {
     e.preventDefault();
     e.stopPropagation();
-  }
+    mainContent.classList.remove("drag-over");
+    const inlineZone = document.getElementById("inlineDropZone");
+    if (inlineZone) inlineZone.classList.remove("drag-active");
 
-  // Show overlay when dragging over
-  document.body.addEventListener("dragenter", (e) => {
-    // Only activate if user is logged in and viewing a repo
-    if (!CURRENT_REPO) return;
+    if (!CURRENT_REPO) {
+      toast("Nejdřív otevři repozitář.", "error");
+      return;
+    }
 
-    dragCounter++;
-    overlay.classList.add("active");
-    if (content) content.classList.add("drag-over");
+    toast("Čtu soubory...", "success", 30000);
+    const files = await collectDroppedFiles(e.dataTransfer);
+
+    if (files.length === 0) {
+      toast("Žádné soubory k nahrání.", "error");
+      return;
+    }
+
+    await uploadDroppedFiles(files, CURRENT_REPO, CURRENT_PATH);
   });
-
-  document.body.addEventListener("dragleave", (e) => {
-    dragCounter--;
-    if (dragCounter === 0) {
-      overlay.classList.remove("active");
-      if (content) content.classList.remove("drag-over");
-    }
-  });
-
-  // Handle drop
-  document.body.addEventListener("drop", async (e) => {
-    dragCounter = 0;
-    overlay.classList.remove("active");
-    if (content) content.classList.remove("drag-over");
-
-    // Only process if user is logged in and viewing a repo
-    if (!CURRENT_REPO) return;
-
-    const items = e.dataTransfer.items;
-    const files = [];
-
-    // Process dropped items
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind === "file") {
-        const entry = item.webkitGetAsEntry();
-        if (entry) {
-          await processEntry(entry, "", files);
-        }
-      }
-    }
-
-    if (files.length > 0) {
-      await uploadFilesFromDrop(files);
-    }
-  });
-
-  // Process directory entry recursively
-  async function processEntry(entry, path, files) {
-    if (entry.isFile) {
-      return new Promise((resolve) => {
-        entry.file((file) => {
-          files.push({ file, path: path + file.name });
-          resolve();
-        });
-      });
-    } else if (entry.isDirectory) {
-      const dirReader = entry.createReader();
-      return new Promise((resolve) => {
-        dirReader.readEntries(async (entries) => {
-          for (const entry of entries) {
-            await processEntry(entry, path + entry.name + "/", files);
-          }
-          resolve();
-        });
-      });
-    }
-  }
-
-  // Upload files from drop
-  async function uploadFilesFromDrop(files) {
-    toast(
-      `Nahrávám ${files.length} soubor${files.length > 1 ? "ů" : ""}...`,
-    );
-    let uploaded = 0;
-
-    for (const { file, path: filePath } of files) {
-      try {
-        const content = await readFileAsBase64(file);
-        const uploadPath = CURRENT_PATH
-          ? `${CURRENT_PATH}/${filePath}`
-          : filePath;
-
-        await ghFetch(
-          `/repos/${USERNAME}/${CURRENT_REPO}/contents/${uploadPath}`,
-          {
-            method: "PUT",
-            body: JSON.stringify({
-              message: `Upload: ${filePath}`,
-              content: content,
-            }),
-          },
-        );
-        uploaded++;
-      } catch (err) {
-        toast(`Chyba při nahrání ${filePath}: ${err.message}`, "error");
-      }
-    }
-
-    if (uploaded > 0) {
-      toast(
-        `Nahráno ${uploaded} z ${files.length} soubor${uploaded > 1 ? "ů" : ""}!`,
-      );
-      openRepo(CURRENT_REPO, CURRENT_PATH);
-    }
-  }
 }
 
 // Initialize drag & drop after login
@@ -2672,6 +3075,9 @@ let BROWSE_USER = '';
 let BROWSE_REPO = '';
 let BROWSE_PATH = '';
 
+// State pro kopírování
+let COPY_QUEUE = []; // { srcOwner, srcRepo, srcPath, fileName, isDir }
+
 async function browseUserRepo(owner, repoName, path = '') {
   BROWSE_USER = owner;
   BROWSE_REPO = repoName;
@@ -2682,7 +3088,6 @@ async function browseUserRepo(owner, repoName, path = '') {
   resultsEl.innerHTML = '<div class="search-empty"><div class="spinner"></div><p>Načítám...</p></div>';
 
   try {
-    // Získat info o repo pro default branch
     const repoInfo = await ghFetch(`/repos/${owner}/${repoName}`);
     const defaultBranch = repoInfo.default_branch || 'main';
 
@@ -2691,7 +3096,6 @@ async function browseUserRepo(owner, repoName, path = '') {
       : `/repos/${owner}/${repoName}/contents`;
     const contents = await ghFetch(endpoint);
 
-    // Pokud je to soubor, zobraz ho
     if (!Array.isArray(contents)) {
       if (/\.html?$/i.test(contents.name)) {
         previewHtmlFile(owner, repoName, contents.path, defaultBranch);
@@ -2707,9 +3111,10 @@ async function browseUserRepo(owner, repoName, path = '') {
     statsEl.textContent = `📂 ${owner}/${repoName}${path ? '/' + path : ''}`;
 
     resultsEl.innerHTML = `
-      <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
+      <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;">
         <button class="btn-secondary" onclick="executeSearch()" style="font-size: 11px;">← Hledání</button>
         ${path ? `<button class="btn-secondary" onclick="browseUserRepo('${owner}', '${repoName}', '${parentPath}')" style="font-size: 11px;">↑ Nahoru</button>` : ''}
+        <button class="btn-secondary" onclick="copyFolderToRepo('${owner}', '${repoName}', '${path}')" style="font-size:11px; color:var(--accent); border-color:var(--accent);">📦 Kopírovat celou složku</button>
       </div>
       ${contents.sort((a, b) => {
         if (a.type === 'dir' && b.type !== 'dir') return -1;
@@ -2718,6 +3123,10 @@ async function browseUserRepo(owner, repoName, path = '') {
       }).map(item => {
         const isDir = item.type === 'dir';
         const isHtml = /\.html?$/i.test(item.name);
+        const safeOwner = owner.replace(/'/g, "\\'");
+        const safeRepo = repoName.replace(/'/g, "\\'");
+        const safePath = item.path.replace(/'/g, "\\'");
+        const safeName = item.name.replace(/'/g, "\\'");
         return `
           <div class="search-result-item">
             <div class="search-result-icon">${isDir ? '📂' : getFileIcon(item.name)}</div>
@@ -2726,10 +3135,12 @@ async function browseUserRepo(owner, repoName, path = '') {
               <div class="search-result-desc">${isDir ? 'Složka' : formatBytes(item.size)}</div>
               <div class="search-result-actions">
                 ${isDir ? `
-                  <button onclick="event.stopPropagation(); browseUserRepo('${owner}', '${repoName}', '${item.path}')" class="primary">📂 Otevřít</button>
+                  <button onclick="event.stopPropagation(); browseUserRepo('${safeOwner}', '${safeRepo}', '${safePath}')" class="primary">📂 Otevřít</button>
+                  <button onclick="event.stopPropagation(); copyFolderToRepo('${safeOwner}', '${safeRepo}', '${safePath}')" style="color:var(--accent); border-color:var(--accent);">📦 Kopírovat složku</button>
                 ` : `
-                  ${isHtml ? `<button onclick="event.stopPropagation(); previewHtmlFile('${owner}', '${repoName}', '${item.path}', '${defaultBranch}')" class="primary">▶️ Spustit</button>` : ''}
+                  ${isHtml ? `<button onclick="event.stopPropagation(); previewHtmlFile('${safeOwner}', '${safeRepo}', '${safePath}', '${defaultBranch}')" class="primary">▶️ Spustit</button>` : ''}
                   <button onclick="event.stopPropagation(); window.open('${item.html_url}', '_blank')">🔗 GitHub</button>
+                  <button onclick="event.stopPropagation(); copyFileToRepo('${safeOwner}', '${safeRepo}', '${safePath}', '${safeName}')" style="color:var(--accent); border-color:var(--accent);">📋 Kopírovat</button>
                 `}
               </div>
             </div>
@@ -2741,6 +3152,134 @@ async function browseUserRepo(owner, repoName, path = '') {
   } catch (e) {
     resultsEl.innerHTML = `<div class="search-empty"><div class="icon">⚠️</div><p>Chyba: ${e.message}</p></div>`;
   }
+}
+
+// ── Kopírování souborů z cizího repo do vlastního ──
+
+function copyFileToRepo(srcOwner, srcRepo, srcPath, fileName) {
+  openCopyToRepoModal([{ srcOwner, srcRepo, srcPath, fileName, isDir: false }], fileName);
+}
+
+function copyFolderToRepo(srcOwner, srcRepo, srcPath) {
+  const folderName = srcPath ? srcPath.split('/').pop() : srcRepo;
+  openCopyToRepoModal([{ srcOwner, srcRepo, srcPath, fileName: folderName, isDir: true }], `složka "${folderName}"`);
+}
+
+function openCopyToRepoModal(items, label) {
+  if (!REPOS.length) {
+    toast('Nemáš žádné vlastní repozitáře.', 'error');
+    return;
+  }
+
+  // Sestav modal dynamicky
+  const modal = document.getElementById('copyToRepoModal');
+  document.getElementById('copyToRepoLabel').textContent = label;
+
+  // Naplň select vlastními repozitáři
+  const repoSelect = document.getElementById('copyTargetRepo');
+  repoSelect.innerHTML = REPOS.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+
+  // Nastav výchozí cestu na aktuální
+  const pathInput = document.getElementById('copyTargetPath');
+  pathInput.value = CURRENT_PATH || '';
+
+  // Ulož co kopírujeme
+  modal._items = items;
+
+  modal.style.display = 'flex';
+}
+
+async function executeCopyToRepo() {
+  const modal = document.getElementById('copyToRepoModal');
+  const items = modal._items;
+  const targetRepo = document.getElementById('copyTargetRepo').value;
+  const targetPath = document.getElementById('copyTargetPath').value.trim().replace(/^\/|\/$/g, '');
+
+  if (!targetRepo) { toast('Vyber cílové repo.', 'error'); return; }
+
+  const confirmBtn = document.getElementById('confirmCopyToRepo');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Kopíruji...';
+
+  let totalCopied = 0;
+  let totalFailed = 0;
+
+  for (const item of items) {
+    if (item.isDir) {
+      try {
+        const files = await fetchAllFilesExternal(item.srcOwner, item.srcRepo, item.srcPath);
+        const folderName = item.srcPath ? item.srcPath.split('/').pop() : item.srcRepo;
+        const total = files.length;
+        let done = 0;
+        toast(`Načítám SHA cache...`, 'success', 60000);
+        // Sestav SHA cache pro cílovou složku
+        const shaCache = await buildShaCache(targetRepo, targetPath);
+        toast(`Kopíruji složku... 0/${total}`, 'success', 60000);
+        for (const f of files) {
+          const relPath = f.path.replace(item.srcOwner + '/' + item.srcRepo + '/', '');
+          const relToFolder = item.srcPath ? relPath.replace(item.srcPath + '/', folderName + '/') : relPath;
+          const destPath = targetPath ? `${targetPath}/${relToFolder}` : relToFolder;
+          try {
+            await uploadFileWithCache(targetRepo, destPath, f.content.replace(/\n/g, ''), `Copy: ${relToFolder} from ${item.srcOwner}/${item.srcRepo}`, shaCache);
+            done++;
+            totalCopied++;
+          } catch (e) {
+            totalFailed++;
+          }
+          toast(`Kopíruji složku... ${done}/${total}`, 'success', 60000);
+        }
+      } catch (e) {
+        toast('Chyba při kopírování složky: ' + e.message, 'error');
+        totalFailed++;
+      }
+    } else {
+      try {
+        toast(`Kopíruji ${item.fileName}...`, 'success', 30000);
+        const fileData = await ghFetch(`/repos/${item.srcOwner}/${item.srcRepo}/contents/${item.srcPath}`);
+        const destPath = targetPath ? `${targetPath}/${item.fileName}` : item.fileName;
+        // Pro jeden soubor stačí jednoduchý uploadFileToGitHub
+        await uploadFileToGitHub(targetRepo, destPath, fileData.content.replace(/\n/g, ''), `Copy: ${item.fileName} from ${item.srcOwner}/${item.srcRepo}`);
+        totalCopied++;
+      } catch (e) {
+        toast('Chyba: ' + e.message, 'error');
+        totalFailed++;
+      }
+    }
+  }
+
+  confirmBtn.disabled = false;
+  confirmBtn.textContent = 'Kopírovat';
+  modal.style.display = 'none';
+
+  if (totalCopied > 0) {
+    toast(`✓ Zkopírováno ${totalCopied} soubor${totalCopied > 1 ? 'ů' : ''} do ${targetRepo}${targetPath ? '/' + targetPath : ''}!`);
+    // Pokud jsme právě v cílovém repu, refreshni
+    if (CURRENT_REPO === targetRepo) {
+      openRepo(CURRENT_REPO, CURRENT_PATH);
+    }
+  }
+  if (totalFailed > 0) {
+    toast(`${totalFailed} soubor${totalFailed > 1 ? 'ů' : ''} se nepodařilo zkopírovat.`, 'error');
+  }
+}
+
+// Fetch všech souborů z cizího (nebo vlastního) repo — bez BACKUP_CANCELLED
+async function fetchAllFilesExternal(owner, repo, path = '') {
+  const endpoint = path
+    ? `/repos/${owner}/${repo}/contents/${path}`
+    : `/repos/${owner}/${repo}/contents`;
+  const items = await ghFetch(endpoint);
+  let files = [];
+  for (const item of items) {
+    if (item.type === 'dir') {
+      const sub = await fetchAllFilesExternal(owner, repo, item.path);
+      files = files.concat(sub);
+    } else {
+      const fileData = await ghFetch(`/repos/${owner}/${repo}/contents/${item.path}`);
+      files.push({ path: owner + '/' + repo + '/' + item.path, content: fileData.content });
+    }
+  }
+  return files;
 }
 
 // Preview HTML souboru v iframe
@@ -3030,8 +3569,43 @@ document.getElementById('searchNextPage').onclick = () => {
 };
 
 // ═══════════════════════════════════════
-//  KEYBOARD SHORTCUTS
+//  MOUSE BACK BUTTON NAVIGATION
 // ═══════════════════════════════════════
+// Boční tlačítko myši (button 3 = back) → navigace o složku výš
+// POZOR: browser může button 3 interpretovat různě:
+// - Chrome/Edge: button 3 = back mouse button (Mouse4)
+// - Firefox: stejně
+// mouseup zachytíme před contextmenu eventem
+let _mouseBackHandled = false;
+
+document.addEventListener("mousedown", (e) => {
+  _mouseBackHandled = false;
+  if (e.button === 3) {
+    e.preventDefault();
+    _mouseBackHandled = true;
+    if (CURRENT_REPO && CURRENT_PATH) {
+      const parts = CURRENT_PATH.split("/");
+      const parentPath = parts.slice(0, -1).join("/");
+      openRepo(CURRENT_REPO, parentPath);
+    } else if (CURRENT_REPO && !CURRENT_PATH) {
+      showHomeView();
+    }
+  }
+});
+
+// Zabránit výchozímu kontextovému menu pro boční tlačítka
+document.addEventListener("contextmenu", (e) => {
+  if (_mouseBackHandled) {
+    e.preventDefault();
+    _mouseBackHandled = false;
+  }
+});
+
+document.addEventListener("auxclick", (e) => {
+  if (e.button === 3 || e.button === 4) {
+    e.preventDefault();
+  }
+});
 document.addEventListener("keydown", (e) => {
   // Ctrl+Shift+F - Otevřít GitHub Search
   if (e.ctrlKey && e.shiftKey && e.key === 'F' && TOKEN) {
@@ -3046,43 +3620,10 @@ document.addEventListener("keydown", (e) => {
 
   // Delete - Smazat vybrané soubory (v contextu repozitáře)
   if (e.key === "Delete" && CURRENT_REPO) {
-    const selectedRows = document.querySelectorAll(
-      ".row-checkbox:checked",
-    );
+    const selectedRows = document.querySelectorAll(".row-checkbox:checked");
     if (selectedRows.length > 0) {
       e.preventDefault();
-      if (confirm(`Smazat ${selectedRows.length} vybraných položek?`)) {
-        selectedRows.forEach(async (checkbox) => {
-          const row = checkbox.closest(".file-row");
-          if (row) {
-            const name = row.dataset.name;
-            const path = row.dataset.path;
-            const type = row.dataset.type;
-            try {
-              if (type === "dir") {
-                await deleteDir(CURRENT_REPO, path);
-              } else {
-                const fileData = await ghFetch(
-                  `/repos/${USERNAME}/${CURRENT_REPO}/contents/${path}`,
-                );
-                await ghFetch(
-                  `/repos/${USERNAME}/${CURRENT_REPO}/contents/${path}`,
-                  {
-                    method: "DELETE",
-                    body: JSON.stringify({
-                      message: `Delete: ${name}`,
-                      sha: fileData.sha,
-                    }),
-                  },
-                );
-              }
-            } catch (err) {
-              toast(`Chyba při mazání ${name}: ${err.message}`, "error");
-            }
-          }
-        });
-        setTimeout(() => openRepo(CURRENT_REPO, CURRENT_PATH), 1000);
-      }
+      deleteSelectedItems(CURRENT_REPO, CURRENT_PATH);
     }
   }
 
@@ -3121,12 +3662,321 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("repoCtxModal").style.display = "none";
     document.getElementById("editDescModal").style.display = "none";
     document.getElementById("searchModal").style.display = "none";
+    document.getElementById("copyToRepoModal").style.display = "none";
+    document.getElementById("syncModal").style.display = "none";
+    document.getElementById("cloneModal").style.display = "none";
   }
 });
 
 // ═══════════════════════════════════════
-//  AUTO LOGIN (page load)
+//  COPY TO REPO MODAL
 // ═══════════════════════════════════════
+document.getElementById('cancelCopyToRepo').onclick = () => {
+  document.getElementById('copyToRepoModal').style.display = 'none';
+};
+document.getElementById('copyToRepoModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('copyToRepoModal')) {
+    document.getElementById('copyToRepoModal').style.display = 'none';
+  }
+});
+
+// ═══════════════════════════════════════
+//  SYNC — lokální složka ↔ GitHub repo
+// ═══════════════════════════════════════
+
+let SYNC_DIR_HANDLE = null;   // FileSystemDirectoryHandle
+let SYNC_ANALYSIS = null;     // výsledek porovnání
+
+// Otevřít sync modal
+document.getElementById("syncBtn").addEventListener("click", () => {
+  if (!REPOS.length) { toast("Nejdřív se přihlas.", "error"); return; }
+  const sel = document.getElementById("syncTargetRepo");
+  sel.innerHTML = REPOS.map(r => `<option value="${r.name}">${r.name}</option>`).join("");
+  // Předvyplň aktuální repo pokud je otevřené
+  if (CURRENT_REPO) sel.value = CURRENT_REPO;
+  document.getElementById("syncRepoPath").value = CURRENT_PATH || "";
+  resetSyncUI();
+  document.getElementById("syncModal").style.display = "flex";
+});
+
+document.getElementById("closeSyncModal").addEventListener("click", () => {
+  document.getElementById("syncModal").style.display = "none";
+});
+document.getElementById("syncModal").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("syncModal"))
+    document.getElementById("syncModal").style.display = "none";
+});
+
+function resetSyncUI() {
+  SYNC_ANALYSIS = null;
+  document.getElementById("syncStatusPanel").style.display = "none";
+  document.getElementById("syncStatusList").innerHTML = "";
+  document.getElementById("syncCommitArea").style.display = "none";
+  document.getElementById("syncPushBtn").style.display = "none";
+  document.getElementById("syncPullBtn").style.display = "none";
+}
+
+// Výběr lokální složky přes File System Access API
+document.getElementById("syncPickFolderBtn").addEventListener("click", async () => {
+  if (!window.showDirectoryPicker) {
+    toast("Tvůj prohlížeč nepodporuje File System Access API. Použij Chrome nebo Edge.", "error", 5000);
+    return;
+  }
+  try {
+    SYNC_DIR_HANDLE = await window.showDirectoryPicker({ mode: "readwrite" });
+    document.getElementById("syncLocalFolderName").value = SYNC_DIR_HANDLE.name;
+    resetSyncUI();
+    toast(`Složka "${SYNC_DIR_HANDLE.name}" vybrána`);
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Chyba při výběru složky: " + e.message, "error");
+  }
+});
+
+// Rekurzivně načte všechny soubory z lokální složky → Map<relativePath, File>
+async function readLocalFiles(dirHandle, prefix = "") {
+  const result = new Map();
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (handle.kind === "file") {
+      const file = await handle.getFile();
+      result.set(prefix + name, { handle, file, mtime: file.lastModified });
+    } else if (handle.kind === "directory") {
+      const sub = await readLocalFiles(handle, prefix + name + "/");
+      sub.forEach((v, k) => result.set(k, v));
+    }
+  }
+  return result;
+}
+
+// Rekurzivně načte všechny soubory z GitHub repo → Map<relativePath, {sha, size}>
+async function readGitHubFiles(repo, repoPath = "") {
+  const result = new Map();
+  async function scan(path) {
+    const endpoint = path
+      ? `/repos/${USERNAME}/${repo}/contents/${path}`
+      : `/repos/${USERNAME}/${repo}/contents`;
+    let items;
+    try { items = await ghFetch(endpoint); } catch { return; }
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      if (item.type === "dir") {
+        await scan(item.path);
+      } else {
+        // Relativní cesta vůči repoPath
+        const rel = repoPath ? item.path.replace(repoPath + "/", "") : item.path;
+        result.set(rel, { sha: item.sha, size: item.size, fullPath: item.path });
+      }
+    }
+  }
+  await scan(repoPath);
+  return result;
+}
+
+// Porovnej lokální vs GitHub
+document.getElementById("syncAnalyzeBtn").addEventListener("click", async () => {
+  if (!SYNC_DIR_HANDLE) { toast("Nejdřív vyber lokální složku.", "error"); return; }
+  const repo = document.getElementById("syncTargetRepo").value;
+  const repoPath = document.getElementById("syncRepoPath").value.trim().replace(/^\/|\/$/g, "");
+
+  const btn = document.getElementById("syncAnalyzeBtn");
+  btn.disabled = true;
+  btn.textContent = "🔍 Porovnávám...";
+  resetSyncUI();
+
+  try {
+    toast("Načítám lokální soubory...", "success", 30000);
+    const localFiles = await readLocalFiles(SYNC_DIR_HANDLE);
+
+    toast("Načítám GitHub soubory...", "success", 30000);
+    const ghFiles = await readGitHubFiles(repo, repoPath);
+
+    // Porovnej — pro každý lokální soubor zjisti SHA obsahu
+    // GitHub SHA = sha1("blob " + size + "\0" + content)
+    const analysis = { toUpload: [], toDownload: [], same: [], conflict: [] };
+
+    // Lokální → GitHub
+    for (const [relPath, localInfo] of localFiles) {
+      const ghInfo = ghFiles.get(relPath);
+      if (!ghInfo) {
+        analysis.toUpload.push({ relPath, localInfo, reason: "nový lokálně" });
+      } else {
+        // Porovnej SHA obsahu
+        const localSha = await computeGitBlobSha(localInfo.file);
+        if (localSha !== ghInfo.sha) {
+          analysis.toUpload.push({ relPath, localInfo, ghInfo, reason: "změněn lokálně" });
+        } else {
+          analysis.same.push(relPath);
+        }
+        ghFiles.delete(relPath); // odznač jako zpracovaný
+      }
+    }
+
+    // Co zbyde v ghFiles = existuje na GitHubu ale ne lokálně
+    for (const [relPath, ghInfo] of ghFiles) {
+      analysis.toDownload.push({ relPath, ghInfo, reason: "chybí lokálně" });
+    }
+
+    SYNC_ANALYSIS = { analysis, repo, repoPath, localFiles };
+
+    // Zobraz výsledek
+    renderSyncAnalysis(analysis);
+
+  } catch (e) {
+    toast("Chyba při analýze: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔍 Porovnat";
+  }
+});
+
+// Výpočet Git blob SHA (sha1 of "blob <size>\0<content>")
+async function computeGitBlobSha(file) {
+  const buffer = await file.arrayBuffer();
+  const header = new TextEncoder().encode(`blob ${buffer.byteLength}\0`);
+  const combined = new Uint8Array(header.byteLength + buffer.byteLength);
+  combined.set(header, 0);
+  combined.set(new Uint8Array(buffer), header.byteLength);
+  const hashBuffer = await crypto.subtle.digest("SHA-1", combined);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function renderSyncAnalysis(analysis) {
+  const panel = document.getElementById("syncStatusPanel");
+  const list = document.getElementById("syncStatusList");
+  panel.style.display = "block";
+
+  const total = analysis.toUpload.length + analysis.toDownload.length + analysis.same.length;
+  let html = `<div style="margin-bottom:8px; color:var(--text-dim);">Celkem souborů: ${total} · `;
+  html += `<span style="color:var(--accent);">↑ ${analysis.toUpload.length} k nahrání</span> · `;
+  html += `<span style="color:var(--blue);">↓ ${analysis.toDownload.length} ke stažení</span> · `;
+  html += `<span style="color:var(--text-dim);">${analysis.same.length} shodných</span></div>`;
+
+  if (analysis.toUpload.length) {
+    html += `<div style="color:var(--accent); margin-bottom:4px;">⬆️ K nahrání na GitHub:</div>`;
+    analysis.toUpload.forEach(f => {
+      html += `<div style="padding:2px 0 2px 12px; color:var(--text);">📄 ${f.relPath} <span style="color:var(--text-dim); font-size:10px;">(${f.reason})</span></div>`;
+    });
+  }
+  if (analysis.toDownload.length) {
+    html += `<div style="color:var(--blue); margin-top:8px; margin-bottom:4px;">⬇️ Ke stažení z GitHubu:</div>`;
+    analysis.toDownload.forEach(f => {
+      html += `<div style="padding:2px 0 2px 12px; color:var(--text);">📄 ${f.relPath} <span style="color:var(--text-dim); font-size:10px;">(${f.reason})</span></div>`;
+    });
+  }
+  if (analysis.toUpload.length === 0 && analysis.toDownload.length === 0) {
+    html += `<div style="color:var(--accent); text-align:center; padding:8px;">✓ Vše je synchronizované!</div>`;
+  }
+
+  list.innerHTML = html;
+
+  // Zobraz tlačítka
+  const pushBtn = document.getElementById("syncPushBtn");
+  const pullBtn = document.getElementById("syncPullBtn");
+  const commitArea = document.getElementById("syncCommitArea");
+
+  pushBtn.style.display = analysis.toUpload.length > 0 ? "block" : "none";
+  pushBtn.textContent = `⬆️ Push (${analysis.toUpload.length} souborů)`;
+  pullBtn.style.display = analysis.toDownload.length > 0 ? "block" : "none";
+  pullBtn.textContent = `⬇️ Pull (${analysis.toDownload.length} souborů)`;
+  commitArea.style.display = analysis.toUpload.length > 0 ? "block" : "none";
+  document.getElementById("syncCommitMsg").value =
+    `Sync: ${analysis.toUpload.length} changed, ${analysis.toDownload.length} new local`;
+}
+
+// PUSH — nahraje změněné/nové lokální soubory na GitHub
+document.getElementById("syncPushBtn").addEventListener("click", async () => {
+  if (!SYNC_ANALYSIS) return;
+  const { analysis, repo, repoPath } = SYNC_ANALYSIS;
+  const commitMsg = document.getElementById("syncCommitMsg").value.trim() || "Sync update";
+  const btn = document.getElementById("syncPushBtn");
+  btn.disabled = true;
+
+  const files = analysis.toUpload;
+  const total = files.length;
+  let done = 0;
+  let failed = 0;
+
+  // Sestav SHA cache pro cílovou cestu
+  showUploadProgress("Načítám SHA cache...", 0, files.length);
+  const shaCache = await buildShaCache(repo, repoPath);
+  showUploadProgress("Push na GitHub...", 0, total);
+
+  for (const f of files) {
+    updateUploadProgressFile(f.relPath);
+    try {
+      const content = await readFileAsBase64(f.localInfo.file);
+      const uploadPath = repoPath ? `${repoPath}/${f.relPath}` : f.relPath;
+      await uploadFileWithCache(repo, uploadPath, content, `${commitMsg}: ${f.relPath}`, shaCache);
+      done++;
+    } catch (e) {
+      failed++;
+      console.error("Push chyba:", f.relPath, e);
+    }
+    showUploadProgress("Push na GitHub...", done + failed, total);
+  }
+
+  hideUploadProgress();
+  btn.disabled = false;
+  if (failed > 0) {
+    toast(`Push hotov: ${done}/${total} úspěšně, ${failed} selhalo.`, "error");
+  } else {
+    toast(`✓ Push hotov: ${done} souborů nahráno na GitHub!`);
+  }
+  // Znovu analyzuj
+  document.getElementById("syncAnalyzeBtn").click();
+  if (CURRENT_REPO === repo) openRepo(repo, CURRENT_PATH);
+});
+
+// PULL — stáhne soubory z GitHubu do lokální složky
+document.getElementById("syncPullBtn").addEventListener("click", async () => {
+  if (!SYNC_ANALYSIS || !SYNC_DIR_HANDLE) return;
+  const { analysis, repo } = SYNC_ANALYSIS;
+  const btn = document.getElementById("syncPullBtn");
+  btn.disabled = true;
+
+  const files = analysis.toDownload;
+  const total = files.length;
+  let done = 0;
+  let failed = 0;
+
+  showUploadProgress("Pull z GitHubu...", 0, total);
+
+  for (const f of files) {
+    updateUploadProgressFile(f.relPath);
+    try {
+      // Stáhni obsah z GitHubu
+      const fileData = await ghFetch(`/repos/${USERNAME}/${repo}/contents/${f.ghInfo.fullPath}`);
+      const binaryStr = atob(fileData.content.replace(/\n/g, ""));
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+      // Zapiš do lokální složky (vytvoř podsložky pokud chybí)
+      const parts = f.relPath.split("/");
+      let dirHandle = SYNC_DIR_HANDLE;
+      for (let i = 0; i < parts.length - 1; i++) {
+        dirHandle = await dirHandle.getDirectoryHandle(parts[i], { create: true });
+      }
+      const fileName = parts[parts.length - 1];
+      const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      done++;
+    } catch (e) {
+      failed++;
+      console.error("Pull chyba:", f.relPath, e);
+    }
+    showUploadProgress("Pull z GitHubu...", done + failed, total);
+  }
+
+  hideUploadProgress();
+  btn.disabled = false;
+  if (failed > 0) {
+    toast(`Pull hotov: ${done}/${total} staženo, ${failed} selhalo.`, "error");
+  } else {
+    toast(`✓ Pull hotov: ${done} souborů staženo do lokální složky!`);
+  }
+  document.getElementById("syncAnalyzeBtn").click();
+});
 (async () => {
   const saved = loadToken();
   if (!saved) return;
@@ -3143,6 +3993,7 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("logoutBtn").style.display = "inline-block";
     document.getElementById("searchBtn").style.display = "inline-block";
     document.getElementById("logoutArea").style.display = "block";
+    document.getElementById("sidebarGreeting").innerHTML = `👋 Ahoj, ${USERNAME}!<div class="sidebar-sub">Tvoje repozitáře</div>`;
     showHomeView();
     initMobileTabs();
   } catch (e) {
@@ -3150,3 +4001,40 @@ document.addEventListener("keydown", (e) => {
     TOKEN = "";
   }
 })();
+
+// ═══════════════════════════════════════
+//  CLONE MODAL
+// ═══════════════════════════════════════
+function openCloneModal(repoName, cloneUrl, sshUrl) {
+  document.getElementById("cloneRepoTitle").textContent = repoName;
+  document.getElementById("cloneCmdHttps").textContent = `git clone ${cloneUrl}`;
+  document.getElementById("cloneCmdSsh").textContent = `git clone ${sshUrl}`;
+  document.getElementById("cloneCmdInit").textContent = `git init\ngit remote add origin ${cloneUrl}\ngit pull origin main`;
+  document.getElementById("cloneModal").style.display = "flex";
+}
+
+function copyCloneCmd(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const text = el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    toast("Zkopírováno do schránky!");
+  }).catch(() => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast("Zkopírováno!");
+  });
+}
+
+const _closeCloneBtn = document.getElementById("closeCloneModal");
+if (_closeCloneBtn) _closeCloneBtn.addEventListener("click", () => {
+  document.getElementById("cloneModal").style.display = "none";
+});
+const _cloneModalEl = document.getElementById("cloneModal");
+if (_cloneModalEl) _cloneModalEl.addEventListener("click", (e) => {
+  if (e.target === _cloneModalEl) _cloneModalEl.style.display = "none";
+});

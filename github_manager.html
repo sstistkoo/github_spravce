@@ -94,6 +94,14 @@
           <div style="display: flex; gap: 6px">
             <button
               class="btn-icon"
+              id="syncBtn"
+              title="Synchronizace se složkou"
+              style="font-size: 15px; width: 30px; height: 30px;"
+            >
+              🔄
+            </button>
+            <button
+              class="btn-icon"
               id="backupBtn"
               title="Stáhnut všechny repo jako ZIP"
               style="color: var(--yellow); font-size: 15px"
@@ -779,6 +787,114 @@
      </div>
    </div>
 
+  <!-- SYNC MODAL -->
+  <div class="modal-overlay" id="syncModal" style="display:none">
+    <div class="modal" style="max-width:560px; width:95%;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+        <h3 style="margin:0;">🔄 Sync složky s repozitářem</h3>
+        <button class="btn-icon" id="closeSyncModal" style="font-size:16px;">✕</button>
+      </div>
+
+      <!-- Repo + složka -->
+      <div style="display:grid; gap:10px; margin-bottom:14px;">
+        <div>
+          <label>Repozitář</label>
+          <select id="syncTargetRepo" style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-family:var(--font-mono); font-size:12px;"></select>
+        </div>
+        <div>
+          <label>Podsložka v repo <span style="color:var(--text-dim); font-weight:400;">(prázdné = root)</span></label>
+          <input type="text" id="syncRepoPath" placeholder="např. src nebo prázdné" />
+        </div>
+        <div style="display:flex; gap:8px; align-items:flex-end;">
+          <div style="flex:1;">
+            <label>Lokální složka</label>
+            <input type="text" id="syncLocalFolderName" readonly placeholder="Nevybrána" style="background:var(--surface2); cursor:default;" />
+          </div>
+          <button class="btn-secondary" id="syncPickFolderBtn" style="white-space:nowrap; height:36px;">📂 Vybrat složku</button>
+        </div>
+      </div>
+
+      <!-- Status panel -->
+      <div id="syncStatusPanel" style="display:none; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:10px; margin-bottom:12px; max-height:220px; overflow-y:auto; font-size:11px; font-family:var(--font-mono);">
+        <div id="syncStatusList"></div>
+      </div>
+
+      <!-- Commit zpráva -->
+      <div id="syncCommitArea" style="display:none; margin-bottom:12px;">
+        <label>Commit zpráva</label>
+        <input type="text" id="syncCommitMsg" placeholder="Update files" />
+      </div>
+
+      <!-- Akce -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-secondary" id="syncAnalyzeBtn" style="flex:1;">🔍 Porovnat</button>
+        <button class="btn-confirm" id="syncPushBtn" style="flex:1; display:none;">⬆️ Push → GitHub</button>
+        <button class="btn-secondary" id="syncPullBtn" style="flex:1; display:none;">⬇️ Pull ← GitHub</button>
+      </div>
+      <div style="margin-top:8px; font-size:10px; color:var(--text-dim); line-height:1.5;">
+        ⚠️ Vyžaduje <strong>File System Access API</strong> (Chrome/Edge). Firefox nepodporuje.
+        Push = nahraje změněné soubory na GitHub. Pull = stáhne soubory z GitHubu do lokální složky.
+      </div>
+    </div>
+  </div>
+
+  <!-- COPY TO REPO MODAL -->
+  <div class="modal-overlay" id="copyToRepoModal" style="display: none">
+    <div class="modal">
+      <h3>📋 Kopírovat do vlastního repo</h3>
+      <div style="margin-bottom:12px; padding:8px 10px; background:var(--surface2); border-radius:var(--radius); font-size:12px; color:var(--text-dim);">
+        <span id="copyToRepoLabel" style="color:var(--text);"></span>
+      </div>
+      <label>Cílový repozitář</label>
+      <select id="copyTargetRepo" style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-family:var(--font-mono); font-size:12px;"></select>
+      <label>Cílová složka <span style="color:var(--text-dim); font-weight:400;">(prázdné = root)</span></label>
+      <input type="text" id="copyTargetPath" placeholder="např. src/utils nebo prázdné pro root" />
+      <div class="modal-btns">
+        <button class="btn-cancel" id="cancelCopyToRepo">Zrušit</button>
+        <button class="btn-confirm" id="confirmCopyToRepo" onclick="executeCopyToRepo()">Kopírovat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLONE MODAL -->
+  <div class="modal-overlay" id="cloneModal" style="display:none">
+    <div class="modal" style="max-width:520px; width:95%;">
+      <h3>🔗 Clone — <span id="cloneRepoTitle"></span></h3>
+
+      <div style="display:flex; flex-direction:column; gap:14px; margin-top:4px;">
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="margin:0;">HTTPS clone</label>
+            <button class="btn-secondary" onclick="copyCloneCmd('cloneCmdHttps')" style="font-size:11px; padding:3px 10px;">📋 Kopírovat</button>
+          </div>
+          <pre id="cloneCmdHttps" style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; font-family:var(--font-mono); font-size:12px; color:var(--accent); margin:0; white-space:pre-wrap; word-break:break-all;"></pre>
+        </div>
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="margin:0;">SSH clone</label>
+            <button class="btn-secondary" onclick="copyCloneCmd('cloneCmdSsh')" style="font-size:11px; padding:3px 10px;">📋 Kopírovat</button>
+          </div>
+          <pre id="cloneCmdSsh" style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; font-family:var(--font-mono); font-size:12px; color:var(--blue); margin:0; white-space:pre-wrap; word-break:break-all;"></pre>
+        </div>
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="margin:0;">Inicializovat existující složku</label>
+            <button class="btn-secondary" onclick="copyCloneCmd('cloneCmdInit')" style="font-size:11px; padding:3px 10px;">📋 Kopírovat</button>
+          </div>
+          <pre id="cloneCmdInit" style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; font-family:var(--font-mono); font-size:12px; color:var(--yellow); margin:0; white-space:pre-wrap;"></pre>
+        </div>
+
+      </div>
+
+      <div class="modal-btns" style="margin-top:16px;">
+        <button class="btn-cancel" id="closeCloneModal">Zavřít</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div class="toast" id="toast">
     <div class="toast-title" id="toastTitle"></div>
@@ -786,14 +902,6 @@
   </div>
 
   <!-- DRAG & DROP OVERLAY -->
-  <div class="drag-drop-overlay" id="dragDropOverlay">
-    <div class="drag-drop-message">
-      <div class="icon">📤</div>
-      <div class="title">Přetáhni soubory nebo složky</div>
-      <div class="desc">Pustit pro nahrání do repozitáře</div>
-    </div>
-  </div>
-
   <script src="js/app.js"></script>
 </body>
 </html>
