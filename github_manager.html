@@ -164,14 +164,6 @@
             <span style="color:var(--accent);">🏠 Home</span>
             <button class="btn-icon" id="localRightBtn" title="Otevřít lokální složku v tomto panelu" style="margin-left:auto; font-size:14px;" onclick="openLocalPanel('right')">💾</button>
           </div>
-          <!-- Dual-pane operace -->
-          <div id="dpOpsBar" style="display:flex; gap:4px; padding:4px 8px; background:var(--surface); border-bottom:1px solid var(--border); align-items:center; flex-wrap:wrap;">
-            <button class="dp-btn" id="dpCopyRight" title="Kopírovat označené → pravý panel" style="font-size:11px; width:auto; padding:3px 8px; height:auto;">⇒ Kopírovat</button>
-            <button class="dp-btn" id="dpCopyLeft"  title="Kopírovat označené ← levý panel"  style="font-size:11px; width:auto; padding:3px 8px; height:auto;">⇐ Kopírovat</button>
-            <button class="dp-btn" id="dpMoveRight" title="Přesunout → pravý panel" style="font-size:11px; width:auto; padding:3px 8px; height:auto; color:var(--yellow);">⇒ Přesunout</button>
-            <button class="dp-btn" id="dpMoveLeft"  title="Přesunout ← levý panel"  style="font-size:11px; width:auto; padding:3px 8px; height:auto; color:var(--yellow);">⇐ Přesunout</button>
-            <button class="dp-btn" id="dpSync"      title="Sync obou panelů" style="font-size:11px; width:auto; padding:3px 8px; height:auto; color:var(--accent); margin-left:auto;" id="dpSyncBtn">⇄ Sync</button>
-          </div>
           <div id="rightRepoView" style="overflow-y:auto; flex:1;">
             <div class="empty-state" style="padding:40px 20px; text-align:center;">
               <div style="font-size:32px; margin-bottom:8px;">⊟</div>

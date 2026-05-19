@@ -466,7 +466,13 @@ function renderFileList(repoInfo, repoName, path) {
       <button class="btn-icon" id="syncBtn" title="Synchronizace se složkou" style="font-size:15px; width:30px; height:30px;">🔄</button>
       <button class="btn-icon" id="backupBtn" title="Stáhnout repo jako ZIP" style="color:var(--yellow); font-size:15px; width:30px; height:30px;">💾</button>
       <button class="btn-icon" id="newRepoBtn" title="Nový repozitář" style="width:30px; height:30px;">+</button>
-      <div style="width:1px; background:var(--border); height:20px; margin:0 4px;"></div>
+      <button class="btn-icon" id="localLeftPanelBtn" title="Otevřít lokální složku v tomto panelu" style="font-size:14px; width:30px; height:30px;" onclick="openLocalPanel('left')">🖥️</button>
+      <div style="width:1px; background:var(--border); height:20px; margin:0 2px;"></div>
+      <!-- Dual-pane operace — zobrazí se jen v dual-pane módu -->
+      <button class="dp-panel-btn" id="leftCopyToRight" onclick="dualPaneCopy('right')" style="display:none;" title="Kopírovat označené do pravého panelu">📋→</button>
+      <button class="dp-panel-btn" id="leftMoveToRight" onclick="dualPaneMove('right')" style="display:none; color:var(--yellow);" title="Přesunout označené do pravého panelu">✂️→</button>
+      <button class="dp-panel-btn" id="leftSyncBtn" onclick="dualPaneSync()" style="display:none; color:var(--accent);" title="Sync obou panelů">⇄</button>
+      <div style="width:1px; background:var(--border); height:20px; margin:0 2px;" id="leftDpSep" style="display:none;"></div>
       <button class="btn-secondary" id="deleteSelectedBtn" style="display:none; color:var(--red); border-color:var(--red);">
         <span>🗑️</span> Smazat vybrané
       </button>
@@ -5161,7 +5167,11 @@ function toggleDualPane() {
     btn.title = "Zavřít dual-pane";
     btn.textContent = "⊠";
     rightPanel.style.display = "flex";
-    if (dpOpsBar) dpOpsBar.style.display = "flex";
+    // Zobraz DP tlačítka v levém panelu
+    ["leftCopyToRight","leftMoveToRight","leftSyncBtn","leftDpSep"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "inline-flex";
+    });
     autoOpenRightPanel();
   } else {
     layout.classList.remove("dual-pane");
@@ -5169,6 +5179,11 @@ function toggleDualPane() {
     btn.title = "Dual-pane režim";
     btn.textContent = "⊟";
     rightPanel.style.display = "none";
+    // Schovej DP tlačítka
+    ["leftCopyToRight","leftMoveToRight","leftSyncBtn","leftDpSep"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
     RIGHT_REPO = null;
     RIGHT_PATH = "";
     ACTIVE_PANEL = "left";
@@ -5295,32 +5310,23 @@ function renderRightPanel(repoName, path, contents) {
     }
   });
 
-  // Toolbar — stejná struktura jako levý panel
+  // Toolbar — identický s levým + DP tlačítka do levého panelu + 🖥️ lokální
   const repoObj = REPOS.find(r => r.name === repoName);
-  let html = `<div class="toolbar-actions" style="padding:6px 8px; background:var(--surface); border-bottom:1px solid var(--border);">`;
-
-  // Sync tlačítko s popisem co se synchronizuje
   const syncFolders = getSyncFolders();
   const hasSyncFolder = !!syncFolders[repoName];
+  let html = `<div class="toolbar-actions" style="padding:6px 8px; background:var(--surface); border-bottom:1px solid var(--border);">`;
+
   html += `<button class="btn-icon" title="${hasSyncFolder ? `Sync: ${syncFolders[repoName]} ↔ ${repoName}` : "Přiřadit sync složku"}" style="font-size:15px; width:30px; height:30px; ${hasSyncFolder ? "color:var(--accent);" : ""}" onclick="quickSyncRepo('${repoName}')">🔄</button>`;
-
-  // Smazat vybrané
+  html += `<button class="btn-icon" title="Otevřít lokální složku v tomto panelu" style="font-size:14px; width:30px; height:30px;" onclick="openLocalPanel('right')">🖥️</button>`;
+  html += `<div style="width:1px; background:var(--border); height:20px; margin:0 2px;"></div>`;
+  // DP: ← do levého panelu
+  html += `<button class="dp-panel-btn" onclick="dualPaneCopy('left')" title="Kopírovat označené do levého panelu">←📋</button>`;
+  html += `<button class="dp-panel-btn" onclick="dualPaneMove('left')" title="Přesunout označené do levého panelu" style="color:var(--yellow);">←✂️</button>`;
+  html += `<div style="width:1px; background:var(--border); height:20px; margin:0 2px;"></div>`;
   html += `<button id="rightDeleteBtn" style="display:none; color:var(--red); border-color:var(--red);" class="btn-secondary">🗑️ Smazat</button>`;
-
-  // Nový soubor/složka
   html += `<button class="btn-secondary" onclick="openNewFileModalRight('${repoName}','${path}')" style="background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; font-size:11px; padding:4px 10px;">➕ Nový</button>`;
-
-  // Drop zone
-  html += `<div id="rightDropBtn" title="Přetáhni sem soubory" style="padding:5px 10px; border:1.5px dashed var(--border); border-radius:var(--radius); color:var(--text-dim); font-size:11px; font-family:var(--font-mono); cursor:pointer; display:flex; align-items:center; gap:5px; background:transparent; transition:all 0.15s;" onclick="openFileUploadDialogRight('${repoName}','${path}')">
-    <span style="font-size:14px;">🖐</span><span>soubory</span>
-  </div>`;
-
-  // Clone
-  if (repoObj) {
-    html += `<button class="btn-secondary" onclick="openCloneModal('${repoName}','${repoObj.clone_url||''}','${repoObj.ssh_url||''}')" style="font-size:11px; padding:4px 8px;">🔗 Clone</button>`;
-  }
-
-  // Upload menu
+  html += `<div id="rightDropBtn" title="Přetáhni sem soubory" style="padding:5px 10px; border:1.5px dashed var(--border); border-radius:var(--radius); color:var(--text-dim); font-size:11px; font-family:var(--font-mono); cursor:pointer; display:flex; align-items:center; gap:5px; background:transparent; transition:all 0.15s;" onclick="openFileUploadDialogRight('${repoName}','${path}')"><span style="font-size:14px;">🖐</span><span>soubory</span></div>`;
+  if (repoObj) html += `<button class="btn-secondary" onclick="openCloneModal('${repoName}','${repoObj.clone_url||''}','${repoObj.ssh_url||''}')" style="font-size:11px; padding:4px 8px;">🔗 Clone</button>`;
   html += `<div style="margin-left:auto; position:relative;">
     <button class="btn-secondary" id="rightUploadMenuBtn" style="font-size:11px; padding:4px 8px;">📤 ▼</button>
     <div id="rightUploadMenu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); min-width:190px; z-index:200; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
@@ -5333,12 +5339,14 @@ function renderRightPanel(repoName, path, contents) {
   </div>`;
   html += `</div>`;
 
-  // Tabulka — stejné sloupce jako levý panel
+  // Tabulka — stejné sloupce jako levý panel (Název, Typ, Velikost, Změněno)
   html += `<table class="file-table" style="width:100%;">
     <thead><tr>
       <th style="width:28px;"><input type="checkbox" id="rightSelectAll" class="file-checkbox" /></th>
-      <th class="sortable-th" onclick="RIGHT_SORT = RIGHT_SORT==='name-asc'?'name-desc':'name-asc'; renderRightPanel('${repoName}','${path}',RIGHT_ALL_FILES)">Název</th>
-      <th class="sortable-th" onclick="RIGHT_SORT = RIGHT_SORT==='size-asc'?'size-desc':'size-asc'; renderRightPanel('${repoName}','${path}',RIGHT_ALL_FILES)" style="text-align:right; min-width:60px;">Velikost</th>
+      <th class="sortable-th" onclick="RIGHT_SORT = RIGHT_SORT==='name-asc'?'name-desc':'name-asc'; renderRightPanel('${repoName}','${path}',RIGHT_ALL_FILES)">Název <span style="color:var(--accent); font-size:10px;">${RIGHT_SORT==='name-asc'?'↑':RIGHT_SORT==='name-desc'?'↓':''}</span></th>
+      <th class="sortable-th" style="min-width:50px;">Typ</th>
+      <th class="sortable-th" onclick="RIGHT_SORT = RIGHT_SORT==='size-asc'?'size-desc':'size-asc'; renderRightPanel('${repoName}','${path}',RIGHT_ALL_FILES)" style="text-align:right; min-width:60px;">Velikost <span style="color:var(--accent); font-size:10px;">${RIGHT_SORT==='size-asc'?'↑':RIGHT_SORT==='size-desc'?'↓':''}</span></th>
+      <th class="sortable-th" style="min-width:80px;">Změněno</th>
     </tr></thead>
     <tbody>`;
 
@@ -5349,11 +5357,16 @@ function renderRightPanel(repoName, path, contents) {
     html += `<tr class="file-row right-row" data-name="${escapeHtml(item.name)}" data-path="${escapeHtml(item.path)}" data-type="${item.type}" data-size="${item.size || 0}">
       <td class="checkbox-cell"><input type="checkbox" class="file-checkbox right-row-cb" data-path="${escapeHtml(item.path)}" /></td>
       <td><span class="icon">${icon}</span><span class="${isDir ? "folder-name" : "file-name"}">${escapeHtml(item.name)}</span></td>
+      <td class="meta">${isDir ? "Složka" : "Soubor"}</td>
       <td class="meta" style="text-align:right;">${size}</td>
+      <td class="meta date-cell" data-path="${escapeHtml(item.path)}"><span style="color:var(--text-dim); font-size:10px;">...</span></td>
     </tr>`;
   });
   html += `</tbody></table>`;
   view.innerHTML = html;
+
+  // Lazy datum
+  loadFileDatesInView(repoName, path, view);
 
   // Bind upload menu toggle
   const rUploadBtn = document.getElementById("rightUploadMenuBtn");
@@ -5427,7 +5440,33 @@ function renderRightPanel(repoName, path, contents) {
   }, { passive: true });
 }
 
-// Smazat vybrané v pravém panelu
+// Generická verze loadFileDates pro libovolný view container
+async function loadFileDatesInView(repoName, path, viewEl) {
+  const cells = Array.from(viewEl.querySelectorAll(".date-cell"));
+  if (!cells.length) return;
+  for (let i = 0; i < cells.length; i += 5) {
+    const batch = cells.slice(i, i + 5);
+    await Promise.all(batch.map(async (cell) => {
+      const filePath = cell.dataset.path;
+      if (!filePath) return;
+      try {
+        const commits = await ghFetch(`/repos/${USERNAME}/${repoName}/commits?path=${encodeURIComponent(filePath)}&per_page=1`);
+        if (commits && commits.length > 0) {
+          const date = new Date(commits[0].commit.author.date);
+          const dateStr = date.toLocaleDateString("cs-CZ", { day: "2-digit", month: "2-digit", year: "2-digit" });
+          const timeStr = date.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+          cell.innerHTML = `<span style="font-size:11px;" title="${dateStr} ${timeStr}">${dateStr} <span style="color:var(--text-dim); font-size:10px;">${timeStr}</span></span>`;
+        } else {
+          cell.innerHTML = `<span style="color:var(--text-dim); font-size:10px;">—</span>`;
+        }
+      } catch {
+        cell.innerHTML = `<span style="color:var(--text-dim); font-size:10px;">—</span>`;
+      }
+    }));
+  }
+}
+
+// ─── Smazat vybrané v pravém panelu ───
 async function deleteSelectedRightItems(repo, currentPath) {
   const rows = Array.from(document.querySelectorAll(".right-row-cb:checked"));
   if (!rows.length) return;
@@ -5589,11 +5628,9 @@ async function dualPaneSync() {
 
 // ─── Bind dual-pane tlačítek ───
 document.getElementById("dualPaneBtn").addEventListener("click", toggleDualPane);
-document.getElementById("dpCopyRight").addEventListener("click", () => dualPaneCopy("right"));
-document.getElementById("dpCopyLeft").addEventListener("click", () => dualPaneCopy("left"));
-document.getElementById("dpMoveRight").addEventListener("click", () => dualPaneMove("right"));
-document.getElementById("dpMoveLeft").addEventListener("click", () => dualPaneMove("left"));
-document.getElementById("dpSync").addEventListener("click", dualPaneSync);
+// DP tlačítka jsou nyní inline onclick v toolbar každého panelu
+// leftCopyToRight, leftMoveToRight, leftSyncBtn — v levém panelu
+// ←📋, ←✂️ — v pravém panelu (renderRightPanel)
 // Klik na levý panel → označit jako aktivní
 document.getElementById("mainPanel").addEventListener("click", () => {
   if (!DUAL_PANE) return;

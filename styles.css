@@ -2588,3 +2588,22 @@ body.light .saved-search-item {
 .file-table.dragging .file-row {
     cursor: ns-resize;
 }
+
+/* ─── DUAL PANE PANEL BUTTONS ─── */
+.dp-panel-btn {
+    padding: 3px 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.dp-panel-btn:hover {
+    background: var(--surface);
+    border-color: var(--accent);
+    color: var(--accent);
+}
