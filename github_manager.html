@@ -13,7 +13,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e0f11'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='20'%3E📁%3C/text%3E%3C/svg%3E"
     />
     <title>GitHub Manager</title>
-    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <!-- TOPBAR -->
@@ -209,6 +209,8 @@
               <option value="size-asc">📏 Velikost (↑)</option>
               <option value="size-desc">📏 Velikost (↓)</option>
               <option value="type-asc">📋 Typ (A-Z)</option>
+              <option value="date-desc">📅 Datum (nejnovější)</option>
+              <option value="date-asc">📅 Datum (nejstarší)</option>
             </select>
           </div>
           <div id="repoView"></div>
@@ -927,6 +929,74 @@
     </div>
   </div>
 
+  <!-- QUICK SYNC MODAL -->
+  <div class="modal-overlay" id="quickSyncModal" style="display:none">
+    <div class="modal" style="max-width:680px; width:96%; padding:0; overflow:hidden;">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-weight:600; font-size:14px;">⚡ Quick Sync</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">
+            <span id="qsRepoName" style="color:var(--accent);"></span>
+            <span style="opacity:0.5;"> ↔ </span>
+            <span id="qsFolderName"></span>
+          </div>
+        </div>
+        <button class="btn-icon" id="closeQuickSyncModal" style="font-size:16px;">✕</button>
+      </div>
+      <div id="qsStatusArea" style="max-height:400px; overflow-y:auto; min-height:80px;"></div>
+      <div style="padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-secondary" id="qsAnalyzeBtn">🔍 Analyzovat</button>
+        <button class="btn-confirm" id="qsPushBtn" style="display:none;">⬆️ Push</button>
+        <button class="btn-secondary" id="qsPullBtn" style="display:none; border-color:#58a6ff; color:#58a6ff;">⬇️ Pull</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SMART SYNC RESULT MODAL -->
+  <div class="modal-overlay" id="smartSyncModal" style="display:none">
+    <div class="modal" style="max-width:700px; width:96%; padding:0; overflow:hidden;">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-weight:600; font-size:14px;">⚡ Smart Sync — nalezené změny</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">
+            Repo: <span id="ssmRepoName" style="color:var(--accent);"></span>
+          </div>
+        </div>
+        <button class="btn-icon" onclick="document.getElementById('smartSyncModal').style.display='none'" style="font-size:16px;">✕</button>
+      </div>
+
+      <!-- Souhrn -->
+      <div id="ssmSummary" style="padding:10px 20px; border-bottom:1px solid var(--border); font-size:11px; font-family:var(--font-mono);"></div>
+
+      <!-- Tabulka změn -->
+      <div style="max-height:380px; overflow-y:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0;">
+              <th style="padding:7px 12px; text-align:left; font-size:11px; font-weight:500; color:var(--text-dim); white-space:nowrap;">Stav</th>
+              <th style="padding:7px 8px; text-align:left; font-size:11px; font-weight:500; color:var(--text-dim);">Soubor</th>
+              <th style="padding:7px 4px; text-align:right; font-size:11px; font-weight:500; color:var(--text-dim); white-space:nowrap;">Lokálně</th>
+              <th style="padding:7px 4px; text-align:right; font-size:11px; font-weight:500; color:var(--text-dim); white-space:nowrap;">GitHub</th>
+              <th style="padding:7px 12px; text-align:right; font-size:11px; font-weight:500; color:var(--text-dim);">Δ</th>
+            </tr>
+          </thead>
+          <tbody id="ssmTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Shodné soubory info -->
+      <div style="padding:8px 20px; border-top:1px solid var(--border); font-size:10px; color:var(--text-dim); font-family:var(--font-mono);">
+        Shodných (přeskočeno): <span id="ssmSameCount" style="color:var(--text);">0</span> souborů
+      </div>
+
+      <!-- Akce -->
+      <div style="padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn-cancel" id="ssmCancelBtn">Zrušit</button>
+        <button class="btn-confirm" id="ssmUploadBtn">⬆️ Nahrát</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div class="toast" id="toast">
     <div class="toast-title" id="toastTitle"></div>
@@ -934,6 +1004,6 @@
   </div>
 
   <!-- DRAG & DROP OVERLAY -->
-  <script src="js/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

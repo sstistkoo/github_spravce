@@ -2411,3 +2411,23 @@ body.light .saved-search-item {
     font-size: 11px;
     opacity: 0.6;
 }
+
+/* ─── SORTABLE TABLE HEADERS ─── */
+.sortable-th {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.sortable-th:hover {
+    color: var(--accent);
+}
+.sort-arrow {
+    color: var(--accent);
+    font-size: 11px;
+}
+
+/* ─── DATE CELL ─── */
+.date-cell {
+    white-space: nowrap;
+    min-width: 90px;
+}
