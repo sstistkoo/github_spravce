@@ -2395,53 +2395,59 @@ function openFileUploadDialog(repo, path, mode = "files") {
     let files = rawFiles.map(f => ({ file: f, path: normalize(f) }));
 
     if (mode === "smartsync") {
-      // Porovnej SHA lokálních souborů s GitHubem — nahraje jen rozdíly
       showUploadProgress("Načítám strom GitHubu...", 0, 0);
       try {
-        // Získej celý strom repo jedním requestem
+        // Správná cesta: ref → commit SHA → commit objekt → tree SHA → strom
         const repoInfo = await ghFetch(`/repos/${USERNAME}/${repo}`);
         const branch = repoInfo.default_branch || "main";
         const refData = await ghFetch(`/repos/${USERNAME}/${repo}/git/ref/heads/${branch}`);
-        const treeData = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees/${refData.object.sha}?recursive=1`);
+        const commitSha = refData.object.sha;
+        const commitObj = await ghFetch(`/repos/${USERNAME}/${repo}/git/commits/${commitSha}`);
+        const treeSha = commitObj.tree.sha;
+        const treeData = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees/${treeSha}?recursive=1`);
 
-        // Postav mapu path → blob sha
+        if (!treeData.tree) throw new Error("GitHub nevrátil strom repozitáře");
+
+        // Postav mapu relativní_cesta → blob sha
+        // path = aktuální složka v repo (prefix), soubory jsou relativní vůči ní
         const ghShaMap = new Map();
         const prefix = path ? path + "/" : "";
-        for (const item of (treeData.tree || [])) {
+        for (const item of treeData.tree) {
           if (item.type !== "blob") continue;
-          // Relativní cesta vůči aktuální složce
-          if (path && !item.path.startsWith(prefix)) continue;
-          const rel = path ? item.path.slice(prefix.length) : item.path;
+          if (prefix && !item.path.startsWith(prefix)) continue;
+          const rel = prefix ? item.path.slice(prefix.length) : item.path;
           ghShaMap.set(rel, item.sha);
         }
 
-        // Porovnej SHA lokálních souborů
+        // Porovnej SHA lokálních souborů s GitHubem
         showUploadProgress("Porovnávám soubory...", 0, files.length);
         const toUpload = [];
         let same = 0;
+        let checked = 0;
         for (const f of files) {
           const ghSha = ghShaMap.get(f.path);
           if (!ghSha) {
-            // Soubor na GitHubu chybí → nahrát
-            toUpload.push(f);
+            toUpload.push(f); // soubor na GitHubu chybí
           } else {
-            // Porovnej SHA
             const localSha = await computeLocalBlobSha(f.file);
             if (localSha !== ghSha) {
-              toUpload.push(f);
+              toUpload.push(f); // soubor se změnil
             } else {
               same++;
             }
           }
+          checked++;
+          showUploadProgress("Porovnávám soubory...", checked, files.length);
         }
 
         if (toUpload.length === 0) {
           hideUploadProgress();
-          toast(`✓ Vše je aktuální — ${same} souborů shodných, nic k nahrání.`);
+          toast(`✓ Vše aktuální — ${same} souborů shodných, nic k nahrání.`);
           return;
         }
 
-        toast(`Smart sync: ${toUpload.length} změn, ${same} shodných — nahrávám...`);
+        hideUploadProgress();
+        toast(`Smart sync: ${toUpload.length} ke změně, ${same} shodných`);
         files = toUpload;
       } catch (err) {
         hideUploadProgress();
