@@ -1059,6 +1059,7 @@ document.getElementById("qsAnalyzeBtn").addEventListener("click", runQuickSyncAn
 
 document.getElementById("qsPushBtn").addEventListener("click", async () => {
   const modal = document.getElementById("quickSyncModal");
+  if (!modal._analysis) return;
   const { toUpload, repoName, dirHandle } = modal._analysis;
 
   const localFiles = await readLocalFiles(dirHandle);
@@ -1074,6 +1075,7 @@ document.getElementById("qsPushBtn").addEventListener("click", async () => {
 
 document.getElementById("qsPullBtn").addEventListener("click", async () => {
   const modal = document.getElementById("quickSyncModal");
+  if (!modal._analysis) return;
   const { toDownload, repoName, dirHandle } = modal._analysis;
   modal.style.display = "none";
 
@@ -2786,34 +2788,21 @@ async function runUpload(repo, currentPath, files) {
   const total = files.length;
   if (total === 0) return;
 
-  showUploadProgress("Načítám strukturu...", 0, total);
-
-  // Zjisti kořenové složky pro SHA cache
-  const uploadRoots = new Set();
-  for (const { path: filePath } of files) {
-    const parts = filePath.split("/");
-    if (parts.length > 1) {
-      const root = currentPath ? `${currentPath}/${parts[0]}` : parts[0];
-      uploadRoots.add(root);
-    } else {
-      uploadRoots.add("__root__");
-    }
-  }
-
-  // Sestav SHA cache
+  showUploadProgress("Načítám SHA cache...", 0, total);
+  // → žádné zbytečné 404 pro složky které na GitHubu neexistují
+  showUploadProgress("Načítám SHA cache...", 0, total);
   const shaCache = new Map();
-  for (const root of uploadRoots) {
-    const scanPath = root === "__root__" ? currentPath : root;
-    try {
-      const sub = await buildShaCache(repo, scanPath);
-      sub.forEach((sha, path) => shaCache.set(path, sha));
-    } catch (e) {}
-  }
-  if (uploadRoots.has("__root__") && currentPath) {
-    try {
-      const sub = await buildShaCache(repo, currentPath);
-      sub.forEach((sha, path) => shaCache.set(path, sha));
-    } catch (e) {}
+  try {
+    const repoInfo = await ghFetch(`/repos/${USERNAME}/${repo}`);
+    const branch = repoInfo.default_branch || "main";
+    const refData = await ghFetch(`/repos/${USERNAME}/${repo}/git/ref/heads/${branch}`);
+    const commitObj = await ghFetch(`/repos/${USERNAME}/${repo}/git/commits/${refData.object.sha}`);
+    const treeData = await ghFetch(`/repos/${USERNAME}/${repo}/git/trees/${commitObj.tree.sha}?recursive=1`);
+    for (const item of (treeData.tree || [])) {
+      if (item.type === "blob") shaCache.set(item.path, item.sha);
+    }
+  } catch (e) {
+    // Pokud se SHA cache nepodaří načíst, upload bude bez cache (POST bez SHA = nové soubory)
   }
 
   showUploadProgress("Nahrávám...", 0, total);
@@ -3098,8 +3087,8 @@ function renderSyncRow(f, groupKey, displayName) {
 document.getElementById("ssmUploadBtn").addEventListener("click", async () => {
   const modal = document.getElementById("smartSyncModal");
   const { _repo, _repoPath, _toUpload } = modal;
+  if (!_toUpload) return;
   modal.style.display = "none";
-  // Převeď zpět na { file, path } formát pro runUpload
   const files = _toUpload.map(f => ({ file: f.file, path: f.path }));
   await runUpload(_repo, _repoPath, files);
 });
@@ -4222,6 +4211,7 @@ function openCopyToRepoModal(items, label) {
 async function executeCopyToRepo() {
   const modal = document.getElementById('copyToRepoModal');
   const items = modal._items;
+  if (!items || !items.length) { toast('Nic ke kopírování.', 'error'); return; }
   const targetRepo = document.getElementById('copyTargetRepo').value;
   const targetPath = document.getElementById('copyTargetPath').value.trim().replace(/^\/|\/$/g, '');
 
