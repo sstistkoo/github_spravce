@@ -197,6 +197,8 @@ document.getElementById("loginBtn").onclick = async () => {
     document.getElementById("statusLabel").textContent = USERNAME;
     document.getElementById("logoutBtn").style.display = "inline-block";
     document.getElementById("searchBtn").style.display = "inline-flex";
+    document.getElementById("dualPaneBtn").style.display = "inline-flex";
+    document.getElementById("localLeftBtn").style.display = "inline-flex";
     document.getElementById("sidebarGreeting").innerHTML = `👋 Ahoj, ${USERNAME}!<div class="sidebar-sub">Tvoje repozitáře</div>`;
     showHomeView();
     initMobileTabs();
@@ -458,48 +460,35 @@ function renderFileList(repoInfo, repoName, path) {
         <div class="stat">⭐ <span>${repoInfo.stargazers_count}</span></div>
         <div class="stat">🔀 <span>${repoInfo.forks_count}</span></div>
         <div class="stat">📝 <span>${repoInfo.open_issues_count} issues</span></div>
-        <button class="btn-secondary" onclick="openCloneModal('${repoName}', '${repoInfo.clone_url}', '${repoInfo.ssh_url}')" style="font-size:11px; padding:4px 10px; margin-left:8px;" title="Clone / Git příkazy">🔗 Clone</button>
       </div>
     </div>
     <div class="toolbar-actions">
-      <button class="btn-secondary" id="uploadFilesBtn">
-        <span>📤</span> Nahrát soubory
-      </button>
-      <button class="btn-secondary" id="uploadFolderBtn">
-        <span>📁</span> Nahrát složku
-      </button>
-      <button class="btn-secondary" id="uploadFolderContentsBtn" title="Nahraje obsah složky bez samotné složky — soubory půjdou přímo do aktuálního umístění">
-        <span>📂</span> Nahrát obsah složky
-      </button>
-      <button class="btn-secondary" id="uploadSmartSyncBtn" title="Porovná SHA souborů s GitHubem a nahraje jen chybějící nebo změněné soubory" style="color:var(--accent); border-color:var(--accent);">
-        <span>⚡</span> Smart sync složky
-      </button>
+      <button class="btn-icon" id="syncBtn" title="Synchronizace se složkou" style="font-size:15px; width:30px; height:30px;">🔄</button>
+      <button class="btn-icon" id="backupBtn" title="Stáhnout repo jako ZIP" style="color:var(--yellow); font-size:15px; width:30px; height:30px;">💾</button>
+      <button class="btn-icon" id="newRepoBtn" title="Nový repozitář" style="width:30px; height:30px;">+</button>
+      <div style="width:1px; background:var(--border); height:20px; margin:0 4px;"></div>
       <button class="btn-secondary" id="deleteSelectedBtn" style="display:none; color:var(--red); border-color:var(--red);">
         <span>🗑️</span> Smazat vybrané
       </button>
-      <button class="btn-secondary" id="newFileBtn" onclick="openNewFileModal()" style="background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600;">
+      <button class="btn-secondary" id="newFileBtn" onclick="openNewFileModal()" style="background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600;">
         <span>➕</span> Nový soubor/složka
       </button>
-    </div>
-    <div id="inlineDropBtn" title="Přetáhni sem soubory nebo složky" style="
-      margin: 0 0 0 0;
-      padding: 7px 16px;
-      border: 1.5px dashed var(--border);
-      border-radius: var(--radius);
-      color: var(--text-dim);
-      font-size: 11px;
-      font-family: var(--font-mono);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transition: border-color 0.15s, color 0.15s;
-      flex: 1;
-      min-width: 180px;
-      background: transparent;
-    ">
-      <span style="font-size:14px;">📤</span>
-      <span>Přetáhnout sem soubory</span>
+      <div id="inlineDropBtn" title="Přetáhni sem soubory" style="padding:5px 12px; border:1.5px dashed var(--border); border-radius:var(--radius); color:var(--text-dim); font-size:11px; font-family:var(--font-mono); cursor:pointer; display:flex; align-items:center; gap:6px; transition:border-color 0.15s, color 0.15s; background:transparent;">
+        <span style="font-size:15px;">🖐</span><span>soubory</span>
+      </div>
+      <button class="btn-secondary" onclick="openCloneModal('${repoName}', '${repoInfo.clone_url}', '${repoInfo.ssh_url}')" style="font-size:11px; padding:4px 10px;" title="Clone / Git příkazy">🔗 Clone</button>
+      <div style="margin-left:auto; position:relative;">
+        <button class="btn-secondary" id="uploadMenuBtn" style="font-size:11px; padding:5px 10px;" title="Nahrát soubory">
+          📤 Nahrát <span style="opacity:0.6; font-size:10px;">▼</span>
+        </button>
+        <div id="uploadMenu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); min-width:200px; z-index:200; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
+          <button class="upload-menu-item" id="uploadFilesBtn">📤 Nahrát soubory</button>
+          <button class="upload-menu-item" id="uploadFolderBtn">📁 Nahrát složku</button>
+          <button class="upload-menu-item" id="uploadFolderContentsBtn">📂 Nahrát obsah složky</button>
+          <div style="height:1px; background:var(--border); margin:4px 0;"></div>
+          <button class="upload-menu-item" id="uploadSmartSyncBtn" style="color:var(--accent);">⚡ Smart sync složky</button>
+        </div>
+      </div>
     </div>
     <table class="file-table">
       <thead><tr>
@@ -554,29 +543,85 @@ function renderFileList(repoInfo, repoName, path) {
   // Lazy načtení dat změny — jeden batch request pro celou složku
   loadFileDates(repoName, path);
 
-  // bind click events on rows
-  view.querySelectorAll(".file-row").forEach((row) => {
-    // Levý klik: otevřít soubor/složku
+  // ─── Range select + Drag select ───
+  const allRows = Array.from(view.querySelectorAll(".file-row"));
+  let lastClickedIdx = -1;   // index posledního kliknutého řádku pro Shift+click
+  let isDragging = false;    // právě táhneme myší
+  let dragStartIdx = -1;     // index řádku kde začalo tažení
+  let dragCheckState = true; // checkbox state při tažení (true = označit, false = odznačit)
+
+  // Vrátí index řádku v allRows
+  const rowIdx = (row) => allRows.indexOf(row);
+
+  // Označí/odznačí rozsah řádků (inclusive)
+  const setRangeChecked = (from, to, checked) => {
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    for (let i = lo; i <= hi; i++) {
+      const cb = allRows[i].querySelector(".row-checkbox");
+      if (cb) cb.checked = checked;
+    }
+    updateSelectionUI();
+  };
+
+  allRows.forEach((row, idx) => {
+    const cb = row.querySelector(".row-checkbox");
+
+    // ── Klik na řádek ──
     row.addEventListener("click", (e) => {
-      // Pokud klikl na checkbox, neotvírej soubor
-      if (
-        e.target.classList.contains("file-checkbox") ||
-        e.target.classList.contains("checkbox-cell")
-      ) {
+      const onCheckbox = e.target.classList.contains("file-checkbox") ||
+                         e.target.classList.contains("checkbox-cell");
+
+      if (e.shiftKey && lastClickedIdx !== -1) {
+        // Shift+click → rozsah
+        e.preventDefault();
+        const targetChecked = !cb.checked; // přepneme na opak aktuálního stavu
+        setRangeChecked(lastClickedIdx, idx, true);
+        lastClickedIdx = idx;
         return;
       }
+
+      if (onCheckbox) {
+        // Přímý klik na checkbox → přepnout jen tento
+        lastClickedIdx = idx;
+        updateSelectionUI();
+        return;
+      }
+
       e.preventDefault();
       const isDir = row.dataset.type === "dir";
       if (isDir) {
-        // Otevřít složku
         openRepo(repoName, row.dataset.path);
       } else {
-        // Otevřít soubor (zobrazit obsah nebo preview)
         openFile(row.dataset.name, row.dataset.path, repoName);
       }
     });
 
-    // Pravý klik: kontextové menu
+    // ── Drag select — mousedown na checkbox buňce ──
+    const checkCell = row.querySelector(".checkbox-cell");
+    if (checkCell) {
+      checkCell.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        isDragging = true;
+        dragStartIdx = idx;
+        dragCheckState = !cb.checked;
+        cb.checked = dragCheckState;
+        lastClickedIdx = idx;
+        updateSelectionUI();
+        e.preventDefault();
+        // Přidej třídu pro cursor
+        const table = view.querySelector(".file-table");
+        if (table) table.classList.add("dragging");
+      });
+    }
+
+    // ── Přechod myší přes řádek při tažení ──
+    row.addEventListener("mouseover", () => {
+      if (!isDragging) return;
+      setRangeChecked(dragStartIdx, idx, dragCheckState);
+    });
+
+    // ── Pravý klik: kontextové menu ──
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       openFileContext(
@@ -588,27 +633,27 @@ function renderFileList(repoInfo, repoName, path) {
       );
     });
 
-    // Touch podpora (dlouhý stisk) pro mobil
+    // ── Touch podpora (dlouhý stisk) ──
     let touchTimer = null;
     row.addEventListener("touchstart", (e) => {
       touchTimer = setTimeout(() => {
         e.preventDefault();
-        openFileContext(
-          row.dataset.name,
-          row.dataset.path,
-          row.dataset.type,
-          parseInt(row.dataset.size),
-          repoName,
-        );
+        openFileContext(row.dataset.name, row.dataset.path, row.dataset.type, parseInt(row.dataset.size), repoName);
       }, 500);
     });
-    row.addEventListener("touchend", () => {
-      if (touchTimer) clearTimeout(touchTimer);
-    });
-    row.addEventListener("touchmove", () => {
-      if (touchTimer) clearTimeout(touchTimer);
-    });
+    row.addEventListener("touchend", () => { if (touchTimer) clearTimeout(touchTimer); });
+    row.addEventListener("touchmove", () => { if (touchTimer) clearTimeout(touchTimer); });
   });
+
+  // Ukonči drag select při pustění myši kdekoli
+  document.addEventListener("mouseup", () => {
+    if (isDragging) {
+      const table = view.querySelector(".file-table");
+      if (table) table.classList.remove("dragging");
+    }
+    isDragging = false;
+    dragStartIdx = -1;
+  }, { passive: true });
 
   // Bind visibility toggle
   const visToggle = view.querySelector(".visibility-toggle");
@@ -690,6 +735,18 @@ function renderFileList(repoInfo, repoName, path) {
     cb.addEventListener("click", (e) => e.stopPropagation());
   });
 
+  // Upload dropdown menu
+  const uploadMenuBtn = document.getElementById("uploadMenuBtn");
+  const uploadMenu = document.getElementById("uploadMenu");
+  if (uploadMenuBtn && uploadMenu) {
+    uploadMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      uploadMenu.style.display = uploadMenu.style.display === "none" ? "block" : "none";
+    });
+    // Zavři menu při kliknutí jinam
+    document.addEventListener("click", () => { uploadMenu.style.display = "none"; }, { once: false });
+  }
+
   // Inline drop zóna
   const inlineDropBtn = document.getElementById("inlineDropBtn");
   if (inlineDropBtn) {
@@ -716,45 +773,32 @@ function renderFileList(repoInfo, repoName, path) {
         inlineDropBtn.style.background = "";
       }
     });
-    inlineDropBtn.addEventListener("drop", (e) => {
-      inlineDropBtn.style.borderColor = "";
-      inlineDropBtn.style.color = "";
-      inlineDropBtn.style.background = "";
-      // Drop zpracuje mainContent handler v setupDragAndDrop
-    });
   }
 
-  // Upload button
+  // Upload buttons (v menu)
   const uploadBtn = document.getElementById("uploadFilesBtn");
-  if (uploadBtn) {
-    uploadBtn.addEventListener("click", () => {
-      openFileUploadDialog(repoName, path);
-    });
-  }
-
-  // Upload folder button (se složkou jako prefixem)
+  if (uploadBtn) uploadBtn.addEventListener("click", () => { uploadMenu.style.display = "none"; openFileUploadDialog(repoName, path); });
   const uploadFolderBtn = document.getElementById("uploadFolderBtn");
-  if (uploadFolderBtn) {
-    uploadFolderBtn.addEventListener("click", () => {
-      openFileUploadDialog(repoName, path, "folder");
-    });
-  }
-
-  // Upload folder CONTENTS button (bez prefixu složky)
+  if (uploadFolderBtn) uploadFolderBtn.addEventListener("click", () => { uploadMenu.style.display = "none"; openFileUploadDialog(repoName, path, "folder"); });
   const uploadFolderContentsBtn = document.getElementById("uploadFolderContentsBtn");
-  if (uploadFolderContentsBtn) {
-    uploadFolderContentsBtn.addEventListener("click", () => {
-      openFileUploadDialog(repoName, path, "contents");
-    });
-  }
-
-  // Smart sync button
+  if (uploadFolderContentsBtn) uploadFolderContentsBtn.addEventListener("click", () => { uploadMenu.style.display = "none"; openFileUploadDialog(repoName, path, "contents"); });
   const uploadSmartSyncBtn = document.getElementById("uploadSmartSyncBtn");
-  if (uploadSmartSyncBtn) {
-    uploadSmartSyncBtn.addEventListener("click", () => {
-      openFileUploadDialog(repoName, path, "smartsync");
-    });
-  }
+  if (uploadSmartSyncBtn) uploadSmartSyncBtn.addEventListener("click", () => { uploadMenu.style.display = "none"; openFileUploadDialog(repoName, path, "smartsync"); });
+
+  // Sync/Backup/NewRepo v panelu — rebind (sdílí ID se sidebarem, bindujeme znovu)
+  const syncBtnPanel = document.getElementById("syncBtn");
+  if (syncBtnPanel) syncBtnPanel.onclick = () => {
+    if (!REPOS.length) { toast("Nejdřív se přihlas.", "error"); return; }
+    const sel = document.getElementById("syncTargetRepo");
+    if (sel) { sel.innerHTML = REPOS.map(r => `<option value="${r.name}">${r.name}</option>`).join(""); if (CURRENT_REPO) sel.value = CURRENT_REPO; }
+    document.getElementById("syncRepoPath").value = CURRENT_PATH || "";
+    resetSyncUI();
+    document.getElementById("syncModal").style.display = "flex";
+  };
+  const backupBtnPanel = document.getElementById("backupBtn");
+  if (backupBtnPanel) backupBtnPanel.onclick = () => document.getElementById("backupModal").style.display = "flex";
+  const newRepoBtnPanel = document.getElementById("newRepoBtn");
+  if (newRepoBtnPanel) newRepoBtnPanel.onclick = () => document.getElementById("newRepoModal").style.display = "flex";
 }
 
 // ─── Sort arrow indikátor ───
@@ -2974,6 +3018,18 @@ async function runSmartSyncAnalysis(repo, repoPath, files) {
   }
 }
 
+function openFileUploadDialogRight(repo, path, mode = "files") {
+  // Dočasně přepne CURRENT_REPO/CURRENT_PATH pro upload, pak vrátí
+  const _repo = CURRENT_REPO;
+  const _path = CURRENT_PATH;
+  CURRENT_REPO = repo;
+  CURRENT_PATH = path;
+  openFileUploadDialog(repo, path, mode);
+  // Původní hodnoty se vrátí po dokončení uploadu (openRepo je volán s repo/path)
+  CURRENT_REPO = _repo;
+  CURRENT_PATH = _path;
+}
+
 // ─── Smart Sync Result Modal ───
 function openSmartSyncResultModal(repo, repoPath, toUpload, sameCount, branch) {
   const modal = document.getElementById("smartSyncModal");
@@ -5014,6 +5070,8 @@ document.getElementById("syncPullBtn").addEventListener("click", async () => {
     document.getElementById("statusLabel").textContent = USERNAME;
     document.getElementById("logoutBtn").style.display = "inline-block";
     document.getElementById("searchBtn").style.display = "inline-block";
+    document.getElementById("dualPaneBtn").style.display = "inline-flex";
+    document.getElementById("localLeftBtn").style.display = "inline-flex";
     document.getElementById("logoutArea").style.display = "block";
     document.getElementById("sidebarGreeting").innerHTML = `👋 Ahoj, ${USERNAME}!<div class="sidebar-sub">Tvoje repozitáře</div>`;
     showHomeView();
@@ -5060,3 +5118,803 @@ const _cloneModalEl = document.getElementById("cloneModal");
 if (_cloneModalEl) _cloneModalEl.addEventListener("click", (e) => {
   if (e.target === _cloneModalEl) _cloneModalEl.style.display = "none";
 });
+
+// ═══════════════════════════════════════
+//  DUAL PANE MANAGER
+// ═══════════════════════════════════════
+
+let DUAL_PANE = false;
+let RIGHT_REPO = null;
+let RIGHT_PATH = "";
+let ACTIVE_PANEL = "left"; // "left" | "right"
+
+// Stav pravého panelu
+let RIGHT_ALL_FILES = [];
+let RIGHT_SORT = "name-asc";
+
+function updateDpOpsBar() {
+  if (!DUAL_PANE) return;
+  const leftIsLocal = !!LOCAL_HANDLES.left;
+  const rightIsLocal = !!LOCAL_HANDLES.right;
+
+  const copyRight = document.getElementById("dpCopyRight");
+  const copyLeft  = document.getElementById("dpCopyLeft");
+  const moveRight = document.getElementById("dpMoveRight");
+  const moveLeft  = document.getElementById("dpMoveLeft");
+
+  if (copyRight) copyRight.textContent = rightIsLocal ? "⇒ → Lokálně" : "⇒ Kopírovat";
+  if (copyLeft)  copyLeft.textContent  = leftIsLocal  ? "⇐ → Lokálně" : "⇐ Kopírovat";
+  if (moveRight) moveRight.textContent = rightIsLocal ? "⇒ Přesunout lok." : "⇒ Přesunout";
+  if (moveLeft)  moveLeft.textContent  = leftIsLocal  ? "⇐ Přesunout lok." : "⇐ Přesunout";
+}
+
+function toggleDualPane() {
+  DUAL_PANE = !DUAL_PANE;
+  const layout = document.getElementById("mainLayout");
+  const btn = document.getElementById("dualPaneBtn");
+  const rightPanel = document.getElementById("rightPanel");
+  const dpOpsBar = document.getElementById("dpOpsBar");
+
+  if (DUAL_PANE) {
+    layout.classList.add("dual-pane");
+    btn.classList.add("active");
+    btn.title = "Zavřít dual-pane";
+    btn.textContent = "⊠";
+    rightPanel.style.display = "flex";
+    if (dpOpsBar) dpOpsBar.style.display = "flex";
+    autoOpenRightPanel();
+  } else {
+    layout.classList.remove("dual-pane");
+    btn.classList.remove("active");
+    btn.title = "Dual-pane režim";
+    btn.textContent = "⊟";
+    rightPanel.style.display = "none";
+    RIGHT_REPO = null;
+    RIGHT_PATH = "";
+    ACTIVE_PANEL = "left";
+  }
+}
+
+function autoOpenRightPanel() {
+  // Automaticky otevři jiné repo než je v levém panelu
+  const other = REPOS.find(r => r.name !== CURRENT_REPO);
+  if (other) {
+    openRightPanel(other.name, "");
+  } else {
+    showRightHome();
+  }
+}
+
+async function openRightPanel(repoName, path = "") {
+  RIGHT_REPO = repoName;
+  RIGHT_PATH = path;
+  ACTIVE_PANEL = "right";
+
+  updateRightBreadcrumb(repoName, path);
+
+  const view = document.getElementById("rightRepoView");
+  view.innerHTML = `<div style="padding:20px; color:var(--text-dim); font-size:12px; font-family:var(--font-mono);">Načítám...</div>`;
+
+  try {
+    const endpoint = path
+      ? `/repos/${USERNAME}/${repoName}/contents/${path}`
+      : `/repos/${USERNAME}/${repoName}/contents`;
+    const contents = await ghFetch(endpoint);
+
+    if (!Array.isArray(contents)) {
+      openFileViewer(contents.name, contents.path, repoName);
+      return;
+    }
+    RIGHT_ALL_FILES = contents;
+    renderRightPanel(repoName, path, contents);
+  } catch (e) {
+    view.innerHTML = `<div style="padding:20px; color:var(--red); font-size:12px;">Chyba: ${e.message}</div>`;
+  }
+}
+
+function updateRightBreadcrumb(repoName, path) {
+  const bc = document.getElementById("rightBreadcrumb");
+  let html = ``;
+
+  if (!repoName) {
+    // Home stav
+    html = `<span style="color:var(--accent);">🏠 Home</span>`;
+  } else {
+    const parts = path ? path.split("/") : [];
+    // 🏠 klikací → showRightHome
+    html = `<button class="up-btn" onclick="showRightHome()" title="Home">🏠</button>`;
+    if (path) {
+      // Tlačítko ↑ nahoru o složku
+      const parentPath = parts.slice(0, -1).join("/");
+      html += `<button class="up-btn" onclick="openRightPanel('${repoName}','${parentPath}')" title="O složku výš">↑</button>`;
+    }
+    // Repo name klikací → root repo
+    html += `<span onclick="openRightPanel('${repoName}','')" style="cursor:pointer; color:var(--accent);">${repoName}</span>`;
+    parts.forEach((part, i) => {
+      const partPath = parts.slice(0, i + 1).join("/");
+      const isLast = i === parts.length - 1;
+      html += `<span style="color:var(--text-dim); margin:0 2px;">/</span>`;
+      html += isLast
+        ? `<span style="color:var(--text);">${part}</span>`
+        : `<span onclick="openRightPanel('${repoName}','${partPath}')" style="cursor:pointer; color:var(--accent);">${part}</span>`;
+    });
+  }
+  bc.innerHTML = html;
+}
+
+function showRightHome() {
+  RIGHT_REPO = null;
+  RIGHT_PATH = "";
+  LOCAL_HANDLES.right = null; // opuštění lokálního módu
+  LOCAL_PATHS.right = [];
+  updateRightBreadcrumb(null, "");
+  updateDpOpsBar();
+  const view = document.getElementById("rightRepoView");
+  const syncFolders = getSyncFolders();
+
+  if (!REPOS.length) {
+    view.innerHTML = `<div class="empty-state" style="padding:40px 20px; text-align:center;"><div style="font-size:32px;">📭</div><p>Žádné repozitáře</p></div>`;
+    return;
+  }
+
+  view.innerHTML = `
+    <table class="file-table repo-table-home">
+      <thead><tr><th>Repozitář</th><th>Viditelnost</th><th>Popis</th><th>Aktualizován</th></tr></thead>
+      <tbody>
+        ${REPOS.map(r => `
+          <tr class="repo-row" data-repo="${r.name}" style="cursor:pointer;">
+            <td><span class="icon">📁</span><span class="folder-name">${r.name}</span></td>
+            <td><span class="visibility ${r.private ? "priv" : "pub"}">${r.private ? "🔒 Private" : "🌐 Public"}</span></td>
+            <td class="meta">${r.description || "—"}</td>
+            <td class="meta">${new Date(r.updated_at).toLocaleDateString("cs-CZ")}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  view.querySelectorAll(".repo-row").forEach(row => {
+    row.addEventListener("click", () => openRightPanel(row.dataset.repo, ""));
+    row.addEventListener("contextmenu", (e) => { e.preventDefault(); /* TODO: right panel repo context */ });
+  });
+}
+
+function renderRightPanel(repoName, path, contents) {
+  const view = document.getElementById("rightRepoView");
+
+  // Sort
+  const sorted = [...contents];
+  sorted.sort((a, b) => {
+    if (a.type === "dir" && b.type !== "dir") return -1;
+    if (a.type !== "dir" && b.type === "dir") return 1;
+    switch (RIGHT_SORT) {
+      case "name-desc": return b.name.localeCompare(a.name);
+      case "size-asc": return (a.size || 0) - (b.size || 0);
+      case "size-desc": return (b.size || 0) - (a.size || 0);
+      default: return a.name.localeCompare(b.name);
+    }
+  });
+
+  // Toolbar — stejná struktura jako levý panel
+  const repoObj = REPOS.find(r => r.name === repoName);
+  let html = `<div class="toolbar-actions" style="padding:6px 8px; background:var(--surface); border-bottom:1px solid var(--border);">`;
+
+  // Sync tlačítko s popisem co se synchronizuje
+  const syncFolders = getSyncFolders();
+  const hasSyncFolder = !!syncFolders[repoName];
+  html += `<button class="btn-icon" title="${hasSyncFolder ? `Sync: ${syncFolders[repoName]} ↔ ${repoName}` : "Přiřadit sync složku"}" style="font-size:15px; width:30px; height:30px; ${hasSyncFolder ? "color:var(--accent);" : ""}" onclick="quickSyncRepo('${repoName}')">🔄</button>`;
+
+  // Smazat vybrané
+  html += `<button id="rightDeleteBtn" style="display:none; color:var(--red); border-color:var(--red);" class="btn-secondary">🗑️ Smazat</button>`;
+
+  // Nový soubor/složka
+  html += `<button class="btn-secondary" onclick="openNewFileModalRight('${repoName}','${path}')" style="background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; font-size:11px; padding:4px 10px;">➕ Nový</button>`;
+
+  // Drop zone
+  html += `<div id="rightDropBtn" title="Přetáhni sem soubory" style="padding:5px 10px; border:1.5px dashed var(--border); border-radius:var(--radius); color:var(--text-dim); font-size:11px; font-family:var(--font-mono); cursor:pointer; display:flex; align-items:center; gap:5px; background:transparent; transition:all 0.15s;" onclick="openFileUploadDialogRight('${repoName}','${path}')">
+    <span style="font-size:14px;">🖐</span><span>soubory</span>
+  </div>`;
+
+  // Clone
+  if (repoObj) {
+    html += `<button class="btn-secondary" onclick="openCloneModal('${repoName}','${repoObj.clone_url||''}','${repoObj.ssh_url||''}')" style="font-size:11px; padding:4px 8px;">🔗 Clone</button>`;
+  }
+
+  // Upload menu
+  html += `<div style="margin-left:auto; position:relative;">
+    <button class="btn-secondary" id="rightUploadMenuBtn" style="font-size:11px; padding:4px 8px;">📤 ▼</button>
+    <div id="rightUploadMenu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); min-width:190px; z-index:200; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
+      <button class="upload-menu-item" onclick="document.getElementById('rightUploadMenu').style.display='none'; openFileUploadDialogRight('${repoName}','${path}')">📤 Nahrát soubory</button>
+      <button class="upload-menu-item" onclick="document.getElementById('rightUploadMenu').style.display='none'; openFileUploadDialogRight('${repoName}','${path}','folder')">📁 Nahrát složku</button>
+      <button class="upload-menu-item" onclick="document.getElementById('rightUploadMenu').style.display='none'; openFileUploadDialogRight('${repoName}','${path}','contents')">📂 Nahrát obsah složky</button>
+      <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+      <button class="upload-menu-item" style="color:var(--accent);" onclick="document.getElementById('rightUploadMenu').style.display='none'; openFileUploadDialogRight('${repoName}','${path}','smartsync')">⚡ Smart sync</button>
+    </div>
+  </div>`;
+  html += `</div>`;
+
+  // Tabulka — stejné sloupce jako levý panel
+  html += `<table class="file-table" style="width:100%;">
+    <thead><tr>
+      <th style="width:28px;"><input type="checkbox" id="rightSelectAll" class="file-checkbox" /></th>
+      <th class="sortable-th" onclick="RIGHT_SORT = RIGHT_SORT==='name-asc'?'name-desc':'name-asc'; renderRightPanel('${repoName}','${path}',RIGHT_ALL_FILES)">Název</th>
+      <th class="sortable-th" onclick="RIGHT_SORT = RIGHT_SORT==='size-asc'?'size-desc':'size-asc'; renderRightPanel('${repoName}','${path}',RIGHT_ALL_FILES)" style="text-align:right; min-width:60px;">Velikost</th>
+    </tr></thead>
+    <tbody>`;
+
+  sorted.forEach(item => {
+    const isDir = item.type === "dir";
+    const icon = isDir ? "📂" : getFileIcon(item.name);
+    const size = isDir ? "—" : formatBytes(item.size);
+    html += `<tr class="file-row right-row" data-name="${escapeHtml(item.name)}" data-path="${escapeHtml(item.path)}" data-type="${item.type}" data-size="${item.size || 0}">
+      <td class="checkbox-cell"><input type="checkbox" class="file-checkbox right-row-cb" data-path="${escapeHtml(item.path)}" /></td>
+      <td><span class="icon">${icon}</span><span class="${isDir ? "folder-name" : "file-name"}">${escapeHtml(item.name)}</span></td>
+      <td class="meta" style="text-align:right;">${size}</td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  view.innerHTML = html;
+
+  // Bind upload menu toggle
+  const rUploadBtn = document.getElementById("rightUploadMenuBtn");
+  const rUploadMenu = document.getElementById("rightUploadMenu");
+  if (rUploadBtn && rUploadMenu) {
+    rUploadBtn.addEventListener("click", (e) => { e.stopPropagation(); rUploadMenu.style.display = rUploadMenu.style.display === "none" ? "block" : "none"; });
+    document.addEventListener("click", () => { rUploadMenu.style.display = "none"; }, { passive: true });
+  }
+
+  // Bind selectAll
+  const rightSelAll = document.getElementById("rightSelectAll");
+  const rightCbs = Array.from(view.querySelectorAll(".right-row-cb"));
+  const rightDeleteBtn = document.getElementById("rightDeleteBtn");
+
+  const updateRightSelUI = () => {
+    const n = rightCbs.filter(cb => cb.checked).length;
+    if (rightSelAll) { rightSelAll.checked = n > 0 && n === rightCbs.length; rightSelAll.indeterminate = n > 0 && n < rightCbs.length; }
+    if (rightDeleteBtn) { rightDeleteBtn.style.display = n > 0 ? "inline-flex" : "none"; rightDeleteBtn.textContent = `🗑️ Smazat (${n})`; }
+  };
+  if (rightSelAll) rightSelAll.addEventListener("change", () => { rightCbs.forEach(cb => cb.checked = rightSelAll.checked); updateRightSelUI(); });
+  if (rightDeleteBtn) rightDeleteBtn.addEventListener("click", () => deleteSelectedRightItems(repoName, path));
+
+  // Drag + Shift+click select v pravém panelu
+  const allRightRows = Array.from(view.querySelectorAll(".right-row"));
+  let rLastIdx = -1, rDragging = false, rDragStart = -1, rDragState = true;
+  const rRowIdx = (row) => allRightRows.indexOf(row);
+  const setRightRange = (from, to, checked) => {
+    const lo = Math.min(from, to), hi = Math.max(from, to);
+    for (let i = lo; i <= hi; i++) { const cb = allRightRows[i].querySelector(".right-row-cb"); if (cb) cb.checked = checked; }
+    updateRightSelUI();
+  };
+
+  allRightRows.forEach((row, idx) => {
+    const cb = row.querySelector(".right-row-cb");
+
+    // Klik — otevřít nebo Shift+click range
+    row.addEventListener("click", (e) => {
+      const onCb = e.target.classList.contains("file-checkbox") || e.target.classList.contains("checkbox-cell");
+      if (e.shiftKey && rLastIdx !== -1) { e.preventDefault(); setRightRange(rLastIdx, idx, true); rLastIdx = idx; return; }
+      if (onCb) { rLastIdx = idx; updateRightSelUI(); return; }
+      e.preventDefault();
+      if (row.dataset.type === "dir") openRightPanel(repoName, row.dataset.path);
+      else openFileViewer(row.dataset.name, row.dataset.path, repoName);
+    });
+
+    // Pravý klik
+    row.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openFileContext(row.dataset.name, row.dataset.path, row.dataset.type, parseInt(row.dataset.size), repoName);
+    });
+
+    // Drag select na checkbox buňce
+    const checkCell = row.querySelector(".checkbox-cell");
+    if (checkCell) {
+      checkCell.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        rDragging = true; rDragStart = idx; rDragState = !cb.checked;
+        cb.checked = rDragState; rLastIdx = idx; updateRightSelUI(); e.preventDefault();
+      });
+    }
+    row.addEventListener("mouseover", () => { if (rDragging) setRightRange(rDragStart, idx, rDragState); });
+  });
+
+  document.addEventListener("mouseup", () => { rDragging = false; rDragStart = -1; }, { passive: true });
+
+  // Klik na panel → aktivní
+  view.addEventListener("click", () => {
+    ACTIVE_PANEL = "right";
+    document.getElementById("mainPanel").classList.remove("dp-active");
+    document.getElementById("rightPanel").classList.add("dp-active");
+  }, { passive: true });
+}
+
+// Smazat vybrané v pravém panelu
+async function deleteSelectedRightItems(repo, currentPath) {
+  const rows = Array.from(document.querySelectorAll(".right-row-cb:checked"));
+  if (!rows.length) return;
+  if (!confirm(`Smazat ${rows.length} položek?`)) return;
+  const dirs = [], files = [];
+  for (const cb of rows) {
+    const row = cb.closest(".file-row");
+    if (!row) continue;
+    if (row.dataset.type === "dir") dirs.push(row.dataset.path);
+    else files.push({ name: row.dataset.name, path: row.dataset.path });
+  }
+  showUploadProgress("Mažu...", 0, rows.length);
+  let done = 0;
+  if (dirs.length) { try { await deleteDirsBatch(repo, dirs); done += dirs.length; } catch (e) { toast("Chyba: " + e.message, "error"); } }
+  for (const f of files) {
+    if (isCancelled()) break;
+    try { const fd = await ghFetch(`/repos/${USERNAME}/${repo}/contents/${f.path}`); await ghFetch(`/repos/${USERNAME}/${repo}/contents/${f.path}`, { method: "DELETE", body: JSON.stringify({ message: `delete: ${f.name}`, sha: fd.sha }) }); done++; }
+    catch (e) { toast(`Chyba: ${f.name}`, "error", 3000); }
+    showUploadProgress("Mažu...", done, rows.length);
+  }
+  hideUploadProgress();
+  toast(`✓ Smazáno ${done}/${rows.length}`);
+  openRightPanel(repo, currentPath);
+}
+
+// Nový soubor v pravém panelu — přepne kontext dočasně
+function openNewFileModalRight(repo, path) {
+  const _r = CURRENT_REPO, _p = CURRENT_PATH;
+  CURRENT_REPO = repo; CURRENT_PATH = path;
+  openNewFileModal();
+  CURRENT_REPO = _r; CURRENT_PATH = _p;
+}
+
+// ─── Operace mezi panely ───
+
+function getDualPaneSources(direction) {
+  // direction: "right" = přesouvám z levého do pravého, "left" = opačně
+  if (direction === "right") {
+    // Zdroj = levý panel (CURRENT_REPO), cíl = pravý panel (RIGHT_REPO)
+    const rows = Array.from(document.querySelectorAll("#repoView .row-checkbox:checked"));
+    return {
+      srcRepo: CURRENT_REPO, srcPath: CURRENT_PATH,
+      dstRepo: RIGHT_REPO, dstPath: RIGHT_PATH,
+      items: rows.map(cb => {
+        const row = cb.closest(".file-row");
+        return { name: row.dataset.name, path: row.dataset.path, type: row.dataset.type };
+      })
+    };
+  } else {
+    // Zdroj = pravý panel, cíl = levý panel
+    const rows = Array.from(document.querySelectorAll(".right-row-cb:checked"));
+    return {
+      srcRepo: RIGHT_REPO, srcPath: RIGHT_PATH,
+      dstRepo: CURRENT_REPO, dstPath: CURRENT_PATH,
+      items: rows.map(cb => {
+        const row = cb.closest(".file-row");
+        return { name: row.dataset.name, path: row.dataset.path, type: row.dataset.type };
+      })
+    };
+  }
+}
+
+async function dualPaneCopy(direction) {
+  const leftIsLocal  = !!LOCAL_HANDLES.left;
+  const rightIsLocal = !!LOCAL_HANDLES.right;
+
+  // Lokální → GitHub
+  if (direction === "right" && leftIsLocal) { await copyLocalToGitHub("left"); return; }
+  if (direction === "left"  && rightIsLocal) { await copyLocalToGitHub("right"); return; }
+  // GitHub → Lokální
+  if (direction === "right" && rightIsLocal) { await copyGitHubToLocal("right"); return; }
+  if (direction === "left"  && leftIsLocal)  { await copyGitHubToLocal("left");  return; }
+
+  // GitHub → GitHub
+  const { srcRepo, dstRepo, dstPath, items } = getDualPaneSources(direction);
+  if (!items.length) { toast("Nic není označeno.", "error"); return; }
+  if (!dstRepo) { toast("Cílový panel nemá otevřené repo.", "error"); return; }
+
+  const total = items.length;
+  showUploadProgress(`Kopíruji → ${dstRepo}...`, 0, total);
+  let done = 0;
+
+  for (const item of items) {
+    if (isCancelled()) break;
+    try {
+      if (item.type === "dir") {
+        // Rekurzivně zkopíruj složku
+        const files = await fetchAllFilesExternal(USERNAME, srcRepo, item.path);
+        const folderName = item.path.split("/").pop();
+        for (const f of files) {
+          const relPath = f.path.replace(`${USERNAME}/${srcRepo}/`, "");
+          const relToFolder = relPath.replace(item.path + "/", folderName + "/");
+          const destPath = dstPath ? `${dstPath}/${relToFolder}` : relToFolder;
+          await uploadFileToGitHub(dstRepo, destPath, f.content.replace(/\n/g, ""), `Copy from ${srcRepo}: ${relToFolder}`);
+        }
+      } else {
+        const fileData = await ghFetch(`/repos/${USERNAME}/${srcRepo}/contents/${item.path}`);
+        const destPath = dstPath ? `${dstPath}/${item.name}` : item.name;
+        await uploadFileToGitHub(dstRepo, destPath, fileData.content.replace(/\n/g, ""), `Copy from ${srcRepo}: ${item.name}`);
+      }
+      done++;
+    } catch (e) {
+      toast(`Chyba: ${item.name}: ${e.message}`, "error", 4000);
+    }
+    showUploadProgress(`Kopíruji → ${dstRepo}...`, done, total);
+  }
+
+  hideUploadProgress();
+  toast(`✓ Zkopírováno ${done}/${total} do ${dstRepo}`);
+  // Refresh cílového panelu
+  if (direction === "right") openRightPanel(dstRepo, dstPath || "");
+  else openRepo(dstRepo, dstPath || "");
+}
+
+async function dualPaneMove(direction) {
+  const { srcRepo, srcPath, dstRepo, dstPath, items } = getDualPaneSources(direction);
+  if (!items.length) { toast("Nic není označeno.", "error"); return; }
+  if (!dstRepo) { toast("Cílový panel nemá otevřené repo.", "error"); return; }
+  if (!confirm(`Přesunout ${items.length} položek z ${srcRepo} do ${dstRepo}?\n(Smaže originály)`)) return;
+
+  // Nejdřív zkopíruj, pak smaž originály
+  await dualPaneCopy(direction);
+
+  // Smaž originály z zdrojového panelu
+  showUploadProgress("Mažu originály...", 0, items.length);
+  const dirs = items.filter(i => i.type === "dir").map(i => i.path);
+  const files = items.filter(i => i.type !== "dir");
+  let done = 0;
+
+  if (dirs.length) {
+    try { await deleteDirsBatch(srcRepo, dirs); done += dirs.length; } catch (e) { toast("Chyba při mazání složek: " + e.message, "error"); }
+  }
+  for (const f of files) {
+    if (isCancelled()) break;
+    try {
+      const fd = await ghFetch(`/repos/${USERNAME}/${srcRepo}/contents/${f.path}`);
+      await ghFetch(`/repos/${USERNAME}/${srcRepo}/contents/${f.path}`, {
+        method: "DELETE",
+        body: JSON.stringify({ message: `move to ${dstRepo}: ${f.name}`, sha: fd.sha }),
+      });
+      done++;
+    } catch (e) { toast(`Chyba mazání ${f.name}`, "error", 3000); }
+    showUploadProgress("Mažu originály...", done, items.length);
+  }
+
+  hideUploadProgress();
+  toast(`✓ Přesunuto ${done}/${items.length} do ${dstRepo}`);
+  if (direction === "right") openRepo(srcRepo, srcPath || "");
+  else openRightPanel(srcRepo, srcPath || "");
+}
+
+async function dualPaneSync() {
+  if (!CURRENT_REPO || !RIGHT_REPO) { toast("Oba panely musí mít otevřené repo.", "error"); return; }
+  const modal = document.getElementById("quickSyncModal");
+  // Použij existující quick sync infrastrukturu
+  // Simuluj jako by levý panel byl lokální a pravý je "GitHub"
+  toast("Sync mezi panely — funkce využívá Smart Sync modal.", "success", 3000);
+}
+
+// ─── Bind dual-pane tlačítek ───
+document.getElementById("dualPaneBtn").addEventListener("click", toggleDualPane);
+document.getElementById("dpCopyRight").addEventListener("click", () => dualPaneCopy("right"));
+document.getElementById("dpCopyLeft").addEventListener("click", () => dualPaneCopy("left"));
+document.getElementById("dpMoveRight").addEventListener("click", () => dualPaneMove("right"));
+document.getElementById("dpMoveLeft").addEventListener("click", () => dualPaneMove("left"));
+document.getElementById("dpSync").addEventListener("click", dualPaneSync);
+// Klik na levý panel → označit jako aktivní
+document.getElementById("mainPanel").addEventListener("click", () => {
+  if (!DUAL_PANE) return;
+  ACTIVE_PANEL = "left";
+  document.getElementById("rightPanel").classList.remove("dp-active");
+  document.getElementById("mainPanel").classList.add("dp-active");
+}, { passive: true });
+
+// ═══════════════════════════════════════
+//  LOCAL FILESYSTEM PANEL
+// ═══════════════════════════════════════
+
+// Stav lokálního panelu — může být buď v levém nebo pravém
+let LOCAL_HANDLES = {
+  left: null,   // FileSystemDirectoryHandle pro levý panel
+  right: null,  // FileSystemDirectoryHandle pro pravý panel
+};
+let LOCAL_PATHS = {
+  left: [],   // zásobník adresářových handles pro navigaci zpět
+  right: [],
+};
+
+// Otevři lokální složku v daném panelu
+async function openLocalPanel(side) {
+  if (!window.showDirectoryPicker) {
+    toast("File System Access API není dostupné (Chrome/Edge).", "error");
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+    LOCAL_HANDLES[side] = handle;
+    LOCAL_PATHS[side] = [handle];
+    await renderLocalPanel(side, handle);
+    updateDpOpsBar();
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Chyba: " + e.message, "error");
+  }
+}
+
+// Renderuje obsah lokální složky v panelu
+async function renderLocalPanel(side, dirHandle) {
+  LOCAL_HANDLES[side] = dirHandle;
+  const viewId = side === "left" ? "repoView" : "rightRepoView";
+  const bcId   = side === "left" ? "breadcrumb" : "rightBreadcrumb";
+  const view   = document.getElementById(viewId);
+  const bc     = document.getElementById(bcId);
+
+  // Aktualizuj breadcrumb
+  const pathParts = LOCAL_PATHS[side].map(h => h.name);
+  let bcHtml = `<button class="up-btn" onclick="${side === 'left' ? 'showHomeView' : 'showRightHome'}()" title="Home">🏠</button>`;
+  if (LOCAL_PATHS[side].length > 1) {
+    bcHtml += `<button class="up-btn" onclick="localGoUp('${side}')" title="O složku výš">↑</button>`;
+  }
+  bcHtml += `<span style="color:var(--yellow);">💾</span>`;
+  pathParts.forEach((part, i) => {
+    bcHtml += `<span style="color:var(--text-dim); margin:0 2px;">/</span>`;
+    const isLast = i === pathParts.length - 1;
+    if (isLast) {
+      bcHtml += `<span style="color:var(--text);">${part}</span>`;
+    } else {
+      bcHtml += `<span style="color:var(--accent); cursor:pointer;" onclick="localGoToDepth('${side}',${i + 1})">${part}</span>`;
+    }
+  });
+  bc.innerHTML = bcHtml;
+
+  view.innerHTML = `<div style="padding:16px; color:var(--text-dim); font-size:12px; font-family:var(--font-mono);">Načítám...</div>`;
+
+  // Načti obsah adresáře
+  const entries = [];
+  try {
+    for await (const [name, handle] of dirHandle.entries()) {
+      entries.push({ name, handle, isDir: handle.kind === "directory" });
+    }
+  } catch (e) {
+    view.innerHTML = `<div style="padding:16px; color:var(--red); font-size:12px;">Chyba čtení: ${e.message}</div>`;
+    return;
+  }
+
+  // Seřaď — složky napřed, pak abecedně
+  entries.sort((a, b) => {
+    if (a.isDir && !b.isDir) return -1;
+    if (!a.isDir && b.isDir) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Toolbar
+  let html = `<div class="toolbar-actions" style="padding:6px 8px; background:var(--surface); border-bottom:1px solid var(--border);">`;
+  html += `<span style="font-size:11px; color:var(--yellow); font-family:var(--font-mono);">💾 Lokální disk</span>`;
+  html += `<div style="width:1px; background:var(--border); height:16px; margin:0 6px;"></div>`;
+  html += `<button class="btn-secondary" id="local${side}DeleteBtn" style="display:none; color:var(--red); border-color:var(--red); font-size:11px;">🗑️ Smazat</button>`;
+  html += `<button class="btn-secondary" onclick="localCreateFolder('${side}')" style="font-size:11px; padding:4px 8px;">📁 Nová složka</button>`;
+  html += `<span style="margin-left:auto; font-size:10px; color:var(--text-dim); font-family:var(--font-mono);">${entries.length} položek</span>`;
+  html += `</div>`;
+
+  // Tabulka
+  html += `<table class="file-table" style="width:100%;">
+    <thead><tr>
+      <th style="width:28px;"><input type="checkbox" id="local${side}SelAll" class="file-checkbox" /></th>
+      <th>Název</th>
+      <th style="text-align:right; min-width:60px;">Typ</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (const entry of entries) {
+    const icon = entry.isDir ? "📂" : getFileIcon(entry.name);
+    html += `<tr class="file-row local-row-${side}" data-name="${escapeHtml(entry.name)}" data-isdir="${entry.isDir}">
+      <td class="checkbox-cell"><input type="checkbox" class="file-checkbox local-cb-${side}" /></td>
+      <td><span class="icon">${icon}</span><span class="${entry.isDir ? "folder-name" : "file-name"}">${escapeHtml(entry.name)}</span></td>
+      <td class="meta" style="text-align:right;">${entry.isDir ? "Složka" : "Soubor"}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+  view.innerHTML = html;
+
+  // ── Bind events ──
+
+  // SelectAll
+  const selAll = document.getElementById(`local${side}SelAll`);
+  const cbs = Array.from(view.querySelectorAll(`.local-cb-${side}`));
+  const delBtn = document.getElementById(`local${side}DeleteBtn`);
+  const updateLocalSelUI = () => {
+    const n = cbs.filter(c => c.checked).length;
+    if (selAll) { selAll.checked = n > 0 && n === cbs.length; selAll.indeterminate = n > 0 && n < cbs.length; }
+    if (delBtn) { delBtn.style.display = n > 0 ? "inline-flex" : "none"; delBtn.textContent = `🗑️ Smazat (${n})`; }
+  };
+  if (selAll) selAll.addEventListener("change", () => { cbs.forEach(c => c.checked = selAll.checked); updateLocalSelUI(); });
+  cbs.forEach(cb => cb.addEventListener("change", updateLocalSelUI));
+  if (delBtn) delBtn.addEventListener("click", () => deleteLocalSelected(side, dirHandle, entries));
+
+  // Drag + Shift+click select
+  const allLocalRows = Array.from(view.querySelectorAll(`.local-row-${side}`));
+  let lLastIdx = -1, lDragging = false, lDragStart = -1, lDragState = true;
+  const setLocalRange = (from, to, checked) => {
+    const lo = Math.min(from, to), hi = Math.max(from, to);
+    for (let i = lo; i <= hi; i++) { const cb = allLocalRows[i]?.querySelector(`.local-cb-${side}`); if (cb) cb.checked = checked; }
+    updateLocalSelUI();
+  };
+
+  allLocalRows.forEach((row, idx) => {
+    const cb = row.querySelector(`.local-cb-${side}`);
+    row.addEventListener("click", (e) => {
+      const onCb = e.target.classList.contains("file-checkbox") || e.target.classList.contains("checkbox-cell");
+      if (e.shiftKey && lLastIdx !== -1) { e.preventDefault(); setLocalRange(lLastIdx, idx, true); lLastIdx = idx; return; }
+      if (onCb) { lLastIdx = idx; updateLocalSelUI(); return; }
+      e.preventDefault();
+      const entry = entries[idx];
+      if (entry && entry.isDir) {
+        LOCAL_PATHS[side] = [...LOCAL_PATHS[side], entry.handle];
+        renderLocalPanel(side, entry.handle);
+      }
+      // Pro soubory — TODO: preview
+    });
+    const checkCell = row.querySelector(".checkbox-cell");
+    if (checkCell) {
+      checkCell.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        lDragging = true; lDragStart = idx; lDragState = !cb?.checked;
+        if (cb) cb.checked = lDragState;
+        lLastIdx = idx; updateLocalSelUI(); e.preventDefault();
+      });
+    }
+    row.addEventListener("mouseover", () => { if (lDragging) setLocalRange(lDragStart, idx, lDragState); });
+  });
+
+  document.addEventListener("mouseup", () => { lDragging = false; lDragStart = -1; }, { passive: true });
+
+  // Drag & drop — nahrání souborů z počítače do lokální složky
+  view.addEventListener("dragover", (e) => { e.preventDefault(); view.style.outline = "2px solid var(--accent)"; });
+  view.addEventListener("dragleave", (e) => { if (!view.contains(e.relatedTarget)) view.style.outline = ""; });
+  view.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    view.style.outline = "";
+    const files = await collectDroppedFiles(e.dataTransfer);
+    if (!files.length) return;
+    showUploadProgress("Kopírování do lokální složky...", 0, files.length);
+    let done = 0;
+    for (const { file, path: filePath } of files) {
+      if (isCancelled()) break;
+      try {
+        const parts = filePath.split("/");
+        let dh = dirHandle;
+        for (let i = 0; i < parts.length - 1; i++) dh = await dh.getDirectoryHandle(parts[i], { create: true });
+        const fh = await dh.getFileHandle(parts[parts.length - 1], { create: true });
+        const wr = await fh.createWritable();
+        await wr.write(file);
+        await wr.close();
+        done++;
+      } catch (err) { toast(`Chyba: ${filePath}: ${err.message}`, "error", 3000); }
+      showUploadProgress("Kopírování do lokální složky...", done, files.length);
+    }
+    hideUploadProgress();
+    toast(`✓ Zkopírováno ${done} souborů do lokální složky`);
+    renderLocalPanel(side, dirHandle);
+  });
+}
+
+// Navigace lokálního panelu
+async function localGoUp(side) {
+  if (LOCAL_PATHS[side].length > 1) {
+    LOCAL_PATHS[side].pop();
+    const parent = LOCAL_PATHS[side][LOCAL_PATHS[side].length - 1];
+    await renderLocalPanel(side, parent);
+  }
+}
+
+async function localGoToDepth(side, depth) {
+  LOCAL_PATHS[side] = LOCAL_PATHS[side].slice(0, depth);
+  const handle = LOCAL_PATHS[side][LOCAL_PATHS[side].length - 1];
+  await renderLocalPanel(side, handle);
+}
+
+// Smaž označené lokální soubory/složky
+async function deleteLocalSelected(side, dirHandle, entries) {
+  const view = document.getElementById(side === "left" ? "repoView" : "rightRepoView");
+  const checkedRows = Array.from(view.querySelectorAll(`.local-cb-${side}:checked`));
+  if (!checkedRows.length) return;
+  if (!confirm(`Smazat ${checkedRows.length} lokálních položek? Toto nelze vrátit.`)) return;
+
+  let done = 0;
+  for (const cb of checkedRows) {
+    const row = cb.closest(".file-row");
+    if (!row) continue;
+    const name = row.dataset.name;
+    try {
+      await dirHandle.removeEntry(name, { recursive: true });
+      done++;
+    } catch (e) {
+      toast(`Chyba: ${name}: ${e.message}`, "error", 3000);
+    }
+  }
+  toast(`✓ Smazáno ${done} lokálních položek`);
+  renderLocalPanel(side, dirHandle);
+}
+
+// Vytvoř novou složku
+async function localCreateFolder(side) {
+  const name = prompt("Název nové složky:");
+  if (!name) return;
+  const dirHandle = LOCAL_HANDLES[side];
+  if (!dirHandle) return;
+  try {
+    await dirHandle.getDirectoryHandle(name, { create: true });
+    renderLocalPanel(side, dirHandle);
+    toast(`Složka "${name}" vytvořena`);
+  } catch (e) {
+    toast("Chyba: " + e.message, "error");
+  }
+}
+
+// Zkopíruj označené soubory z lokálního panelu na GitHub
+async function copyLocalToGitHub(side) {
+  const dirHandle = LOCAL_HANDLES[side];
+  if (!dirHandle) { toast("Lokální panel nemá otevřenou složku.", "error"); return; }
+  const dstRepo   = side === "left" ? RIGHT_REPO : CURRENT_REPO;
+  const dstPath   = side === "left" ? RIGHT_PATH : CURRENT_PATH;
+  if (!dstRepo) { toast("Druhý panel nemá otevřené GitHub repo.", "error"); return; }
+
+  const view = document.getElementById(side === "left" ? "repoView" : "rightRepoView");
+  const checkedRows = Array.from(view.querySelectorAll(`.local-cb-${side}:checked`));
+  if (!checkedRows.length) { toast("Označ soubory k zkopírování.", "error"); return; }
+
+  const files = [];
+  for (const cb of checkedRows) {
+    const row = cb.closest(".file-row");
+    if (!row) continue;
+    const name = row.dataset.name;
+    const isDir = row.dataset.isdir === "true";
+    if (isDir) {
+      const subHandle = await dirHandle.getDirectoryHandle(name);
+      const subMap = await readLocalFiles(subHandle);
+      subMap.forEach((v, p) => files.push({ file: v.file, path: `${name}/${p}` }));
+    } else {
+      const fh = await dirHandle.getFileHandle(name);
+      const file = await fh.getFile();
+      files.push({ file, path: name });
+    }
+  }
+
+  if (!files.length) { toast("Žádné soubory k nahrání.", "error"); return; }
+  await runUpload(dstRepo, dstPath, files);
+}
+
+// Zkopíruj z GitHubu do lokálního panelu
+async function copyGitHubToLocal(side) {
+  const dirHandle = LOCAL_HANDLES[side];
+  if (!dirHandle) { toast("Lokální panel nemá otevřenou složku.", "error"); return; }
+  const srcRepo = side === "left" ? CURRENT_REPO : RIGHT_REPO;
+  const srcPath = side === "left" ? CURRENT_PATH : RIGHT_PATH;
+  if (!srcRepo) { toast("Druhý panel nemá otevřené GitHub repo.", "error"); return; }
+
+  // Získej označené soubory z GitHub panelu
+  const ghSide = side === "left" ? "right" : "left";
+  const selector = ghSide === "left" ? "#repoView .row-checkbox:checked" : ".right-row-cb:checked";
+  const checkedRows = Array.from(document.querySelectorAll(selector));
+  if (!checkedRows.length) { toast("Označ soubory v GitHub panelu.", "error"); return; }
+
+  const total = checkedRows.length;
+  let done = 0;
+  showUploadProgress("Stahování z GitHubu...", 0, total);
+
+  for (const cb of checkedRows) {
+    if (isCancelled()) break;
+    const row = cb.closest(".file-row");
+    if (!row) continue;
+    try {
+      const fileData = await ghFetch(`/repos/${USERNAME}/${srcRepo}/contents/${row.dataset.path}`);
+      const binaryStr = atob(fileData.content.replace(/\n/g, ""));
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+      const fh = await dirHandle.getFileHandle(row.dataset.name, { create: true });
+      const wr = await fh.createWritable();
+      await wr.write(bytes);
+      await wr.close();
+      done++;
+    } catch (e) {
+      toast(`Chyba: ${row.dataset.name}: ${e.message}`, "error", 3000);
+    }
+    showUploadProgress("Stahování z GitHubu...", done, total);
+  }
+  hideUploadProgress();
+  toast(`✓ Staženo ${done}/${total} souborů`);
+  // Refresh lokálního panelu
+  renderLocalPanel(side, dirHandle);
+}

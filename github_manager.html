@@ -47,6 +47,14 @@
         >
           🤖
         </button>
+          <button
+          class="btn-icon"
+          id="dualPaneBtn"
+          title="Dual-pane režim (Total Commander)"
+          style="font-size: 15px; width: 30px; height: 30px; display:none;"
+        >
+          ⊟
+        </button>
         </div>
       <div class="sep"></div>
       <div class="status-dot" id="statusDot"></div>
@@ -92,7 +100,7 @@
     </div>
 
     <!-- LAYOUT -->
-    <div class="layout">
+    <div class="layout" id="mainLayout">
       <!-- SIDEBAR -->
       <div class="sidebar" id="sidebar" style="display: none">
         <div class="sidebar-head">
@@ -100,60 +108,29 @@
             <div class="label" id="sidebarGreeting">Repozitáře</div>
           </div>
           <div style="display: flex; gap: 6px">
-            <button
-              class="btn-icon"
-              id="syncBtn"
-              title="Synchronizace se složkou"
-              style="font-size: 15px; width: 30px; height: 30px;"
-            >
-              🔄
-            </button>
-            <button
-              class="btn-icon"
-              id="backupBtn"
-              title="Stáhnut všechny repo jako ZIP"
-              style="color: var(--yellow); font-size: 15px"
-            >
-              💾
-            </button>
-            <button class="btn-icon" id="newRepoBtn" title="Nový repozitář">
-              +
-            </button>
+            <button class="btn-icon" id="syncBtn" title="Synchronizace se složkou" style="font-size: 15px; width: 30px; height: 30px;">🔄</button>
+            <button class="btn-icon" id="backupBtn" title="Stáhnut všechny repo jako ZIP" style="color: var(--yellow); font-size: 15px">💾</button>
+            <button class="btn-icon" id="newRepoBtn" title="Nový repozitář">+</button>
           </div>
         </div>
         <div class="repo-list" id="repoList">
-          <div class="empty-state" style="padding: 40px 10px">
-            <div class="big">📭</div>
-            <p>Žádné repo</p>
-          </div>
+          <div class="empty-state" style="padding: 40px 10px"><div class="big">📭</div><p>Žádné repo</p></div>
         </div>
       </div>
 
-      <!-- MAIN -->
+      <!-- LEFT PANEL (hlavní) -->
       <div class="main" id="mainPanel">
         <!-- LOGIN PANEL -->
         <div class="login-panel" id="loginPanel">
           <div class="login-box">
             <h2>Přihlášení přes GitHub Token</h2>
-            <p>
-              Zadáš tvój personal access token a máš plný přístup ke všem
-              repozitářům – číst i pisat.
-            </p>
+            <p>Zadáš tvój personal access token a máš plný přístup ke všem repozitářům – číst i pisat.</p>
             <label>GitHub Personal Access Token</label>
-            <input
-              type="password"
-              id="tokenInput"
-              placeholder="ghp_xxxxxxxxxxxxxxxxx"
-              autocomplete="off"
-            />
+            <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxx" autocomplete="off" />
             <button class="btn-primary" id="loginBtn">Přihlásit se</button>
             <div class="hint">
-              Nemáš token? Vytvoř si ho
-              <a href="https://github.com/settings/tokens/new" target="_blank"
-                >tady na GitHubu →</a
-              ><br />
-              Potřebuš permissions: <strong>repo</strong> (full),
-              <strong>user:read</strong>
+              Nemáš token? Vytvoř si ho <a href="https://github.com/settings/tokens/new" target="_blank">tady na GitHubu →</a><br />
+              Potřebuš permissions: <strong>repo</strong> (full), <strong>user:read</strong>
             </div>
           </div>
         </div>
@@ -162,48 +139,11 @@
         <div class="content" id="mainContent" style="display: none">
           <div class="breadcrumb" id="breadcrumb">
             <span>🏠 Home</span>
+            <button class="btn-icon" id="localLeftBtn" title="Otevřít lokální složku v tomto panelu" style="margin-left:auto; font-size:14px; display:none;" onclick="openLocalPanel('left')">💾</button>
           </div>
-          <div
-            id="fileToolbar"
-            style="
-              display: none;
-              padding: 12px;
-              background: var(--surface);
-              border-bottom: 1px solid var(--border);
-              display: flex;
-              gap: 8px;
-              align-items: center;
-              flex-wrap: wrap;
-            "
-          >
-            <input
-              type="text"
-              id="fileFilterInput"
-              placeholder="🔍 Filtrovat soubory..."
-              style="
-                flex: 1;
-                min-width: 200px;
-                padding: 8px 12px;
-                background: var(--bg);
-                border: 1px solid var(--border);
-                border-radius: 6px;
-                color: var(--text);
-                font-size: 12px;
-                font-family: var(--font-mono);
-              "
-            />
-            <select
-              id="fileSortSelect"
-              style="
-                padding: 8px 12px;
-                background: var(--bg);
-                border: 1px solid var(--border);
-                border-radius: 6px;
-                color: var(--text);
-                font-size: 12px;
-                font-family: var(--font-mono);
-              "
-            >
+          <div id="fileToolbar" style="display:none; padding:12px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input type="text" id="fileFilterInput" placeholder="🔍 Filtrovat soubory..." style="flex:1; min-width:200px; padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:12px; font-family:var(--font-mono);" />
+            <select id="fileSortSelect" style="padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:12px; font-family:var(--font-mono);">
               <option value="name-asc">📝 Jméno (A-Z)</option>
               <option value="name-desc">📝 Jméno (Z-A)</option>
               <option value="size-asc">📏 Velikost (↑)</option>
@@ -216,6 +156,31 @@
           <div id="repoView"></div>
         </div>
       </div>
+
+      <!-- RIGHT PANEL (dual-pane) -->
+      <div class="main" id="rightPanel" style="display:none; border-left:2px solid var(--border);">
+        <div class="content" id="rightContent">
+          <div class="breadcrumb" id="rightBreadcrumb" style="display:flex; align-items:center; gap:4px; min-height:40px; flex-wrap:wrap;">
+            <span style="color:var(--accent);">🏠 Home</span>
+            <button class="btn-icon" id="localRightBtn" title="Otevřít lokální složku v tomto panelu" style="margin-left:auto; font-size:14px;" onclick="openLocalPanel('right')">💾</button>
+          </div>
+          <!-- Dual-pane operace -->
+          <div id="dpOpsBar" style="display:flex; gap:4px; padding:4px 8px; background:var(--surface); border-bottom:1px solid var(--border); align-items:center; flex-wrap:wrap;">
+            <button class="dp-btn" id="dpCopyRight" title="Kopírovat označené → pravý panel" style="font-size:11px; width:auto; padding:3px 8px; height:auto;">⇒ Kopírovat</button>
+            <button class="dp-btn" id="dpCopyLeft"  title="Kopírovat označené ← levý panel"  style="font-size:11px; width:auto; padding:3px 8px; height:auto;">⇐ Kopírovat</button>
+            <button class="dp-btn" id="dpMoveRight" title="Přesunout → pravý panel" style="font-size:11px; width:auto; padding:3px 8px; height:auto; color:var(--yellow);">⇒ Přesunout</button>
+            <button class="dp-btn" id="dpMoveLeft"  title="Přesunout ← levý panel"  style="font-size:11px; width:auto; padding:3px 8px; height:auto; color:var(--yellow);">⇐ Přesunout</button>
+            <button class="dp-btn" id="dpSync"      title="Sync obou panelů" style="font-size:11px; width:auto; padding:3px 8px; height:auto; color:var(--accent); margin-left:auto;" id="dpSyncBtn">⇄ Sync</button>
+          </div>
+          <div id="rightRepoView" style="overflow-y:auto; flex:1;">
+            <div class="empty-state" style="padding:40px 20px; text-align:center;">
+              <div style="font-size:32px; margin-bottom:8px;">⊟</div>
+              <p style="color:var(--text-dim); font-size:12px;">Aktivuj dual-pane<br>a vyber repozitář</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- NEW REPO MODAL -->

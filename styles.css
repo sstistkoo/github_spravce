@@ -2431,3 +2431,160 @@ body.light .saved-search-item {
     white-space: nowrap;
     min-width: 90px;
 }
+
+/* ─── DUAL PANE MODE ─── */
+#mainLayout.dual-pane {
+    overflow: hidden;
+}
+
+#mainLayout.dual-pane #sidebar {
+    display: none !important;
+}
+
+#mainLayout.dual-pane #mainPanel {
+    flex: 1;
+    min-width: 0;
+    border-right: none;
+}
+
+#mainLayout.dual-pane #dualPaneCenter {
+    display: flex !important;
+}
+
+#mainLayout.dual-pane #rightPanel {
+    display: flex !important;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid var(--border);
+}
+
+#rightPanel .content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+#rightRepoView {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Highlight aktivního panelu */
+#mainPanel.dp-active,
+#rightPanel.dp-active {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* Center toolbar buttons */
+.dp-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.dp-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+}
+
+/* Pravý panel - kompaktní tabulka */
+#rightPanel .file-table th,
+#rightPanel .file-table td {
+    padding: 4px 6px;
+    font-size: 11px;
+}
+
+#rightPanel .file-table .meta {
+    display: none; /* Schovej typ a velikost v pravém panelu pro prostor */
+}
+
+#rightPanel .date-cell {
+    display: none;
+}
+
+/* Dual pane breadcrumb v pravém panelu */
+#rightBreadcrumb {
+    padding: 6px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    min-height: 36px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+}
+
+/* Tlačítko aktivace dual pane */
+#dualPaneBtn.active {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+}
+
+/* Right panel file rows - highlight při výběru */
+#rightPanel .file-row.selected,
+#mainPanel .file-row.selected {
+    background: rgba(0, 229, 160, 0.08);
+}
+
+/* ─── UPLOAD MENU DROPDOWN ─── */
+.upload-menu-item {
+    display: block;
+    width: 100%;
+    padding: 9px 14px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.upload-menu-item:hover {
+    background: var(--surface2);
+}
+
+/* ─── FIX DUAL PANE — bez středového panelu ─── */
+#mainLayout.dual-pane #dualPaneCenter {
+    display: none !important;
+}
+#mainLayout.dual-pane #rightPanel {
+    display: flex !important;
+    flex-direction: column;
+}
+#dpOpsBar {
+    font-size: 11px;
+}
+#dpOpsBar .dp-btn {
+    font-size: 11px;
+    height: 26px;
+    width: auto;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* ─── RANGE / DRAG SELECT ─── */
+.file-row {
+    user-select: none; /* zabraň výběru textu při Shift+click nebo táhnutí */
+}
+.file-row .checkbox-cell {
+    cursor: default;
+}
+/* Cursor při tažení přes řádky */
+.file-table.dragging .file-row {
+    cursor: ns-resize;
+}
